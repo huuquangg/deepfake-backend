@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from fastapi import UploadFile
 
+from deepfake_backend.libs.extractor.open_face.dtos import OpenFaceResponse
+
 
 class OpenFaceService:
     def __init__(
@@ -95,9 +97,9 @@ class OpenFaceService:
         # Run OpenFace (overwrites output each time)
         self._run_feature_extraction(file.filename)
 
-        return {
-            "status": "ok",
-            "input_file": file.filename,
-            "output_dir": self.output_dir,
-            "aligned_faces_dir": os.path.join(self.output_dir, "aligned")
-        }
+        return OpenFaceResponse (
+            status= True,
+            input_file= file.filename,
+            output_dir= self.output_dir,
+            aligned_faces_dir= os.path.join(self.output_dir, "aligned")
+        )

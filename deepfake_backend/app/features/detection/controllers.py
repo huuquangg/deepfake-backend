@@ -8,6 +8,8 @@ import io
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import csv
+import os
+import json
 
 from deepfake_backend.libs.extractor.mobilenet.mobilenet import MobileNetExtractor
 from deepfake_backend.libs.extractor.resnet.resnet import ResNetExtractor
@@ -55,51 +57,56 @@ async def merge(
     model_name: str = Query("mobilenet", enum=["mobilenet", "resnet"])
 ):
     try:
+        # Read image
         img_bytes = await file.read()
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
+        # Extract embedding from chosen model
         if model_name == "mobilenet":
-            embedding = mobilenet_extractor.extract(img)
+            embedding = mobilenet_extractor.extract(img)  # 1D list
         else:
-            embedding = resnet_extractor.extract(img)
+            embedding = resnet_extractor.extract(img)     # 1D list
 
-        # print(f"mobilenet_vec: {embedding}")
+        embedding = np.array(embedding, dtype=np.float32)
+        print(f"[DEBUG] {model_name} embedding shape: {embedding.shape}")
+        print(f"[DEBUG] {model_name} embedding sample: {embedding[:10]}")  # first 10 values
 
+        # Prepare OpenFace CSV path
+        input_file = file.filename
+        csv_file_output = os.path.splitext(input_file)[0] + ".csv"
+        csv_file_path = f"/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/extractor/open_face/output/{csv_file_output}"
 
-        csv_file = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/extractor/open_face/output/sample1.csv"
-
+        # Read OpenFace CSV numeric values (first row only)
         openface_vec = []
-
-        with open(csv_file, newline='') as f:
+        with open(csv_file_path, newline='') as f:
             reader = csv.reader(f)
-            next(reader)  # skip header
-            for row in reader:
-                for value in row:
+            headers = next(reader)  # skip header
+            first_row = next(reader, None)
+            if first_row:
+                for value in first_row:
                     try:
-                        num = float(value)
-                        openface_vec.append(num)
+                        openface_vec.append(float(value))
                     except ValueError:
-                        # ignore empty or non-numeric values
-                        pass
+                        pass  # ignore non-numeric values
 
+        openface_vec = np.array(openface_vec, dtype=np.float32)
+        print(f"[DEBUG] OpenFace vector shape: {openface_vec.shape}")
+        print(f"[DEBUG] OpenFace vector sample: {openface_vec[:10]}")  # first 10 values
 
-        scaler_mn = StandardScaler()
-        scaler_of = StandardScaler()
-        
-        print(f"embedding: {embedding}")
-        print(f"openface_vec: {openface_vec}")
-        embedding = np.array(embedding)
-        openface_vec = np.array(openface_vec)
-        print(f"embedding: {embedding}")
-        print(f"openface_vec: {openface_vec}")
-        
-        mobilenet_scaled = scaler_mn.fit_transform(embedding.reshape(1, -1))
-        openface_scaled = scaler_of.fit_transform(openface_vec.reshape(1, -1))
+        # Optional: scale manually
+        embedding = (embedding - np.mean(embedding)) / (np.std(embedding) + 1e-8)
+        openface_vec = (openface_vec - np.mean(openface_vec)) / (np.std(openface_vec) + 1e-8)
 
-        merged_scaled = np.concatenate([mobilenet_scaled, openface_scaled], axis=1)
-        print(merged_scaled)  # (1, 1958)
+        print(f"[DEBUG] Scaled {model_name} embedding sample: {embedding[:10]}")
+        print(f"[DEBUG] Scaled OpenFace vector sample: {openface_vec[:10]}")
 
-        return JSONResponse(content={"merged_vec": merged_scaled.shape, "model": model_name})
+        # Merge embeddings
+        merged_vec = np.concatenate([embedding, openface_vec], axis=0)
+        print(f"[DEBUG] Merged vector shape: {merged_vec.shape}")
+        print(f"[DEBUG] Merged vector sample: {merged_vec[:10]}")
+
+        return JSONResponse(content={"merged_vector": merged_vec.tolist(),
+                                     "shape": merged_vec.shape})
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
