@@ -93,7 +93,6 @@ async def merge(
         print(f"[DEBUG] OpenFace vector shape: {openface_vec.shape}")
         print(f"[DEBUG] OpenFace vector sample: {openface_vec[:10]}")  # first 10 values
 
-        # Optional: scale manually
         embedding = (embedding - np.mean(embedding)) / (np.std(embedding) + 1e-8)
         openface_vec = (openface_vec - np.mean(openface_vec)) / (np.std(openface_vec) + 1e-8)
 
