@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from fastapi import UploadFile
 
-from deepfake_backend.libs.extractor.open_face.dtos import OpenFaceResponse
+from extractor.open_face.dtos import OpenFaceResponse
 
 
 class OpenFaceService:
@@ -32,15 +32,6 @@ class OpenFaceService:
         # Ensure directories exist
         os.makedirs(self.input_dir, exist_ok=True)
         os.makedirs(self.output_dir, exist_ok=True)
-
-    def _clear_dir(self, path: str):
-        """Remove all old files/folders in a directory."""
-        if os.path.exists(path):
-            subprocess.run(
-                f"sudo rm -rf {path}/*",
-                shell=True,
-                check=True
-            )
 
     def _run_feature_extraction(self, image_filename: str):
         """Run FeatureExtraction on a file already inside mounted input_dir."""
@@ -78,6 +69,15 @@ class OpenFaceService:
         # Fix permissions (make output owned by host user)
         chown_cmd = ["sudo", "chown", "-R", f"{self.user}:{self.user}", self.output_dir]
         subprocess.run(chown_cmd, check=True)
+
+    def _clear_dir(self, path: str):
+            """Remove all old files/folders in a directory."""
+            if os.path.exists(path):
+                subprocess.run(
+                    f"sudo rm -rf {path}/*",
+                    shell=True,
+                    check=True
+                )
 
     def analyze_image(self, file: UploadFile):
         """
