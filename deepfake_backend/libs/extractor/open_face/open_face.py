@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from fastapi import UploadFile
 
-from extractor.open_face.dtos import OpenFaceResponse
+from .dtos import OpenFaceResponse
 
 
 class OpenFaceService:

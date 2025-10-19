@@ -12,12 +12,12 @@ from fastapi import APIRouter, HTTPException, File, UploadFile, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from deepfake_backend.app.features.detection.dtos import DetectionRequest, DetectionResponse
-from deepfake_backend.app.features.detection import services
+from app.features.detection.dtos import DetectionRequest, DetectionResponse
+from app.features.detection import services
 
-from deepfake_backend.libs.extractor.mobilenet.mobilenet import MobileNetExtractor
-from deepfake_backend.libs.extractor.resnet.resnet import ResNetExtractor
-from deepfake_backend.libs.extractor.open_face.open_face import OpenFaceService
+from libs.extractor.mobilenet.mobilenet import MobileNetExtractor
+from libs.extractor.resnet.resnet import ResNetExtractor
+from libs.extractor.open_face.open_face import OpenFaceService
 
 # ---------- Config ----------
 OPENFACE_OUTPUT_DIR = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/extractor/open_face/output"

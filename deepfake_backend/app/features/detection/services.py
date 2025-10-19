@@ -1,5 +1,5 @@
-from deepfake_backend.app.features.detection.repositories import run_detection
-from deepfake_backend.app.features.detection.dtos import DetectionRequest, DetectionResponse
+from app.features.detection.repositories import run_detection
+from app.features.detection.dtos import DetectionRequest, DetectionResponse
 
 def detect_deepfake(request: DetectionRequest) -> DetectionResponse:
     result = run_detection(request.video_url, request.method)
