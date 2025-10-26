@@ -7,9 +7,10 @@ from typing import List, Optional, Tuple
 
 # File paths
 # /home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/tools/fake/fpp_real_v1.csv
-input_csv = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/tools/real/fpp_real_v1.csv"
-output_csv = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/tools/real/fpp_real_v2.csv"
-folder_path = "/home/huuquangdang/huu.quang.dang/thesis/Dataset/facep/faceplus_processed_research_final_2_crop/real"
+input_csv = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/tools/fake/op_vectors_fake_v1.csv"
+output_csv = "/home/huuquangdang/huu.quang.dang/thesis/deepfake/deepfake_backend/libs/tools/fake/op_vectors_fake_v2.csv"
+folder_path = "/home/huuquangdang/huu.quang.dang/thesis/Dataset/celeb_df_crop/fake"
+# folder_path = "/huu.quang.dang/thesis/Dataset/celeb_df_crop/real"
 
 # API endpoint
 analyze_api = "http://127.0.0.1:8000/api/detection/analyze-frame"
@@ -64,16 +65,16 @@ def is_all_zeros_row(row):
     """
     Check if a row has consecutive zeros in the beginning data columns.
     This includes cases like: filename,1.0,0.0,0.0,0.0,0.0,...
-    We check if columns 2-5 (indices 1-4) are all zeros.
+    We check if columns 2-4 (indices 1-3) have multiple zeros.
     """
-    if len(row) <= 5:
+    if len(row) <= 4:
         return False
     
     try:
-        # Check columns 2-5 (indices 1-4): should be checking after first column
-        # Pattern: filename, col1, col2, col3, col4, col5, ...
-        # If col2, col3, col4, col5 (indices 1-4) are all 0.0, it's problematic
-        check_cols = row[1:5]  # Get columns at indices 1, 2, 3, 4
+        # Check columns 2-4 (indices 1-3): these are typically face detection coordinates
+        # Pattern: filename, col1, col2, col3, confidence, ...
+        # If col2, col3 (indices 1, 2) are both 0.0, it's problematic (no face detected)
+        check_cols = row[1:4]  # Get columns at indices 1, 2, 3
         
         zero_count = 0
         for val in check_cols:
@@ -81,41 +82,42 @@ def is_all_zeros_row(row):
                 if float(val) == 0.0:
                     zero_count += 1
             except (ValueError, TypeError):
-                # If we can't convert to float, it's not a zero
                 pass
         
-        # If we have 3 or more consecutive zeros in the first 4 data columns, it's problematic
-        # This catches: 1.0,0.0,0.0,0.0,0.0 or 0.0,0.0,0.0,0.0
-        return zero_count >= 3
+        # If we have 2 or more zeros in the first 3 data columns, it's problematic
+        # This catches: 1.0,0.0,0.0,... or 0.0,0.0,0.0,...
+        return zero_count >= 2
     except:
         return False
 
 
 def is_low_confidence_row(row):
     """
-    Check if a row has low confidence score (less than 0.8).
-    The confidence is in the 4th column (index 3) after filename.
-    Row format: filename, frame, face_id, timestamp, confidence, ...
-    So confidence is at index 4 (0-based).
+    Check if a row has low confidence score (less than 0.80).
+    The confidence is in the 5th column (index 4).
+    Row format: filename, col1, col2, col3, confidence, ...
+    Examples:
+    - filename,1.0,0.0,0.0,0.0,... -> confidence = 0.0 (RETRY)
+    - filename,1.0,0.0,0.0,0.57,... -> confidence = 0.57 (RETRY)
+    - filename,1.0,123.4,45.6,0.98,... -> confidence = 0.98 (OK)
     """
     if len(row) <= 4:
         return False
     
     try:
-        # The 4th column (index 3) after filename is the confidence
-        # Actually looking at the format: filename,1.0,0.0,0.0,0.98
-        # It seems: filename, col1, col2, col3, confidence
-        confidence = float(row[4])  # Index 4 is the 5th column (confidence)
-        return confidence < 0.8
+        # The 5th column (index 4) is the confidence score
+        confidence = float(row[4])
+        # Retry if confidence < 0.80
+        return confidence < 0.80
     except (ValueError, TypeError, IndexError):
         return False
 
 
 def needs_retry(row):
     """
-    Check if a row needs to be retried (failed, all zeros, or low confidence).
+    Check if a row needs to be retried (only low confidence < 80%).
     """
-    return is_failed_row(row) or is_all_zeros_row(row) or is_low_confidence_row(row)
+    return is_low_confidence_row(row)
 
 
 async def process_image(session, file_path, filename, retry_count=0) -> Tuple[str, Optional[List]]:
@@ -181,23 +183,23 @@ async def process_image(session, file_path, filename, retry_count=0) -> Tuple[st
 
 async def retry_problematic_rows(rows):
     """
-    Retry rows that are failed or have all zeros - synchronously (one by one).
+    Retry rows that have low confidence (< 80%) - synchronously (one by one).
     """
     problematic_indices = []
     problematic_filenames = []
     
-    # Find problematic rows
+    # Find problematic rows (only low confidence)
     for idx, row in enumerate(rows):
         if needs_retry(row):
             problematic_indices.append(idx)
             problematic_filenames.append(row[0])
     
     if not problematic_filenames:
-        print("No problematic rows found!")
+        print("No low confidence rows found!")
         return rows
     
     print(f"\n{'='*60}")
-    print(f"Found {len(problematic_filenames)} problematic rows to retry")
+    print(f"Found {len(problematic_filenames)} low confidence rows (< 80%) to retry")
     print(f"Processing synchronously (one by one) to ensure success")
     print(f"{'='*60}\n")
     
@@ -296,26 +298,27 @@ async def async_main():
     
     # Count problematic entries before retry
     failed_count = sum(1 for row in unique_rows if is_failed_row(row))
-    zeros_count = sum(1 for row in unique_rows if is_all_zeros_row(row))
+    zeros_count = sum(1 for row in unique_rows if is_all_zeros_row(row) and not is_failed_row(row))
     low_conf_count = sum(1 for row in unique_rows if is_low_confidence_row(row))
     print(f"Failed entries (False): {failed_count}")
-    print(f"All-zeros entries: {zeros_count}")
-    print(f"Low confidence entries (< 0.8): {low_conf_count}")
+    print(f"All-zeros entries (no face detected): {zeros_count}")
+    print(f"Low confidence entries (< 80%): {low_conf_count}")
     
-    # Retry problematic rows (failed, all zeros, or low confidence)
-    if failed_count > 0 or zeros_count > 0 or low_conf_count > 0:
+    # Retry only low confidence rows (< 80%)
+    if low_conf_count > 0:
+        print(f"\nRetrying only low confidence rows (< 80%)...")
         unique_rows = await retry_problematic_rows(unique_rows)
     
     # Recount after retry
     failed_rows = [row for row in unique_rows if is_failed_row(row)]
-    zeros_rows = [row for row in unique_rows if is_all_zeros_row(row)]
+    zeros_rows = [row for row in unique_rows if is_all_zeros_row(row) and not is_failed_row(row)]
     low_conf_rows = [row for row in unique_rows if is_low_confidence_row(row)]
-    success_rows = [row for row in unique_rows if not needs_retry(row)]
+    success_rows = [row for row in unique_rows if not is_low_confidence_row(row) and not is_failed_row(row)]
     print(f"\nAfter retry:")
-    print(f"Successful entries: {len(success_rows)}")
-    print(f"Failed entries (still): {len(failed_rows)}")
-    print(f"All-zeros entries (still): {len(zeros_rows)}")
-    print(f"Low confidence entries (still): {len(low_conf_rows)}")
+    print(f"Successful entries (confidence >= 80%): {len(success_rows)}")
+    print(f"Failed entries: {len(failed_rows)}")
+    print(f"All-zeros entries: {len(zeros_rows)}")
+    print(f"Low confidence entries (< 80%, still): {len(low_conf_rows)}")
     
     # Sort using quicksort
     print("\nSorting rows using quicksort...")
@@ -332,10 +335,10 @@ async def async_main():
     print(f"Total rows processed: {total_rows}")
     print(f"Duplicates removed: {removed_count}")
     print(f"Final row count: {len(sorted_rows)}")
-    print(f"  - Successful: {len(success_rows)}")
+    print(f"  - Successful (confidence >= 80%): {len(success_rows)}")
     print(f"  - Failed: {len(failed_rows)}")
-    print(f"  - All-zeros: {len(zeros_rows)}")
-    print(f"  - Low confidence: {len(low_conf_rows)}")
+    print(f"  - All-zeros (no face): {len(zeros_rows)}")
+    print(f"  - Low confidence (< 80%): {len(low_conf_rows)}")
     print(f"Output file: {output_csv}")
     print(f"{'='*60}")
     
