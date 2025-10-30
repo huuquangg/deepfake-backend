@@ -1,1 +1,14 @@
-__pycache__/\n*.pyc\n.env\nvenv/\n.venv/
+# Ignore all __pycache__ folders anywhere
+**/__pycache__/
+*.pyc
+
+# Environment files/folders
+.env
+venv/
+.venv/
+
+# Input/Output folders anywhere
+**/input
+**/output
+**/*.h5
+**/*.csv
