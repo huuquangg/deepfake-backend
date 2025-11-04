@@ -25,96 +25,104 @@ ENTROPY_BINS = 41            # số bins khi tính entropy trong [-3, 3]
 def get_srm_kernels() -> List[np.ndarray]:
     k = []
 
-    # Laplacian (4-neighbors)
-    k.append(np.array([[0, -1,  0],
+    # === 1. Laplacian & High-pass cơ bản ===
+    k.append(np.array([[0, -1, 0],
                        [-1, 4, -1],
-                       [0, -1,  0]], dtype=np.float32))
+                       [0, -1, 0]], dtype=np.float32))             # 1
 
-    # Laplacian (8-neighbors)
     k.append(np.array([[-1, -1, -1],
-                       [-1,  8, -1],
-                       [-1, -1, -1]], dtype=np.float32))
+                       [-1, 8, -1],
+                       [-1, -1, -1]], dtype=np.float32))           # 2
 
-    # High-pass (1, -2, 1) 2D
-    k.append(np.array([[ 1, -2,  1],
-                       [-2,  4, -2],
-                       [ 1, -2,  1]], dtype=np.float32))
+    k.append(np.array([[1, -2, 1],
+                       [-2, 4, -2],
+                       [1, -2, 1]], dtype=np.float32))             # 3
 
-    # 2nd derivative horizontal & vertical
-    k.append(np.array([[ 0,  0,  0],
-                       [ 1, -2,  1],
-                       [ 0,  0,  0]], dtype=np.float32))  # H second-deriv
-    k.append(np.array([[ 0,  1,  0],
-                       [ 0, -2,  0],
-                       [ 0,  1,  0]], dtype=np.float32))  # V second-deriv
+    # === 2. Second Derivative (H/V/Diag) ===
+    k.append(np.array([[0, 0, 0],
+                       [1, -2, 1],
+                       [0, 0, 0]], dtype=np.float32))              # 4 H
+    k.append(np.array([[0, 1, 0],
+                       [0, -2, 0],
+                       [0, 1, 0]], dtype=np.float32))              # 5 V
+    k.append(np.array([[1, 0, 0],
+                       [0, -2, 0],
+                       [0, 0, 1]], dtype=np.float32))              # 6 D1
+    k.append(np.array([[0, 0, 1],
+                       [0, -2, 0],
+                       [1, 0, 0]], dtype=np.float32))              # 7 D2
 
-    # Diagonal second-derivative (2 hướng)
-    k.append(np.array([[ 1,  0,  0],
-                       [ 0, -2,  0],
-                       [ 0,  0,  1]], dtype=np.float32))
-    k.append(np.array([[ 0,  0,  1],
-                       [ 0, -2,  0],
-                       [ 1,  0,  0]], dtype=np.float32))
-
-    # Sobel X / Y
+    # === 3. Sobel / Scharr (biên mạnh hơn) ===
     k.append(np.array([[-1, 0, 1],
                        [-2, 0, 2],
-                       [-1, 0, 1]], dtype=np.float32))
+                       [-1, 0, 1]], dtype=np.float32))             # 8 Sobel X
     k.append(np.array([[-1, -2, -1],
-                       [ 0,  0,  0],
-                       [ 1,  2,  1]], dtype=np.float32))
-
-    # Scharr X / Y (nhạy cạnh hơn Sobel)
+                       [0, 0, 0],
+                       [1, 2, 1]], dtype=np.float32))              # 9 Sobel Y
     k.append(np.array([[-3, 0, 3],
                        [-10, 0, 10],
-                       [-3, 0, 3]], dtype=np.float32))
+                       [-3, 0, 3]], dtype=np.float32))             # 10 Scharr X
     k.append(np.array([[-3, -10, -3],
-                       [ 0,   0,  0],
-                       [ 3,  10,  3]], dtype=np.float32))
+                       [0, 0, 0],
+                       [3, 10, 3]], dtype=np.float32))             # 11 Scharr Y
 
-    # Predictive residual (trừ lân cận gần) – 4 hướng
+    # === 4. Predictive Residual (hướng gần) ===
     k.append(np.array([[0, 0, 0],
-                       [1,-1, 0],
-                       [0, 0, 0]], dtype=np.float32))   # from left
+                       [1, -1, 0],
+                       [0, 0, 0]], dtype=np.float32))              # 12 left
     k.append(np.array([[0, 0, 0],
-                       [0,-1, 1],
-                       [0, 0, 0]], dtype=np.float32))   # from right
+                       [0, -1, 1],
+                       [0, 0, 0]], dtype=np.float32))              # 13 right
     k.append(np.array([[0, 1, 0],
-                       [0,-1, 0],
-                       [0, 0, 0]], dtype=np.float32))   # from up
+                       [0, -1, 0],
+                       [0, 0, 0]], dtype=np.float32))              # 14 up
     k.append(np.array([[0, 0, 0],
-                       [0,-1, 0],
-                       [0, 1, 0]], dtype=np.float32))   # from down
+                       [0, -1, 0],
+                       [0, 1, 0]], dtype=np.float32))              # 15 down
 
-    # Predictive residual – 4 đường chéo
+    # === 5. Predictive Residual (đường chéo) ===
     k.append(np.array([[1, 0, 0],
-                       [0,-1, 0],
-                       [0, 0, 0]], dtype=np.float32))   # from up-left
+                       [0, -1, 0],
+                       [0, 0, 0]], dtype=np.float32))              # 16 up-left
     k.append(np.array([[0, 0, 1],
-                       [0,-1, 0],
-                       [0, 0, 0]], dtype=np.float32))   # from up-right
+                       [0, -1, 0],
+                       [0, 0, 0]], dtype=np.float32))              # 17 up-right
     k.append(np.array([[0, 0, 0],
-                       [0,-1, 0],
-                       [1, 0, 0]], dtype=np.float32))   # from down-left
+                       [0, -1, 0],
+                       [1, 0, 0]], dtype=np.float32))              # 18 down-left
     k.append(np.array([[0, 0, 0],
-                       [0,-1, 0],
-                       [0, 0, 1]], dtype=np.float32))   # from down-right
+                       [0, -1, 0],
+                       [0, 0, 1]], dtype=np.float32))              # 19 down-right
 
-    # 5x5 Laplacian of Gaussian (LoG) – nhấn mạnh biên / texture
-    k.append(np.array([[ 0,  0, -1,  0,  0],
-                       [ 0, -1, -2, -1,  0],
+    # === 6. Laplacian of Gaussian (5x5) ===
+    k.append(np.array([[0, 0, -1, 0, 0],
+                       [0, -1, -2, -1, 0],
                        [-1, -2, 16, -2, -1],
-                       [ 0, -1, -2, -1,  0],
-                       [ 0,  0, -1,  0,  0]], dtype=np.float32))
+                       [0, -1, -2, -1, 0],
+                       [0, 0, -1, 0, 0]], dtype=np.float32))       # 20 LoG strong
 
-    # Một số high-pass 5x5 đơn giản
-    k.append(np.array([[ 0,  0, -1,  0,  0],
-                       [ 0, -1, -2, -1,  0],
-                       [-1, -2, 12, -2, -1],
-                       [ 0, -1, -2, -1,  0],
-                       [ 0,  0, -1,  0,  0]], dtype=np.float32))
+    # === 8. Gaussian derivative-like (texture) ===
+    k.append(np.array([[1, -4, 6, -4, 1],
+                       [-4, 16, -24, 16, -4],
+                       [6, -24, 36, -24, 6],
+                       [-4, 16, -24, 16, -4],
+                       [1, -4, 6, -4, 1]], dtype=np.float32))      # 24
 
-    # Bạn có thể thêm nhiều kernel SRM chuẩn hơn tại đây...
+    k.append(np.array([[-1, 2, -1],
+                       [2, -4, 2],
+                       [-1, 2, -1]], dtype=np.float32))            # 25 small LoG
+
+    # === 9. Edge prediction asymmetric ===
+    k.append(np.array([[1, -3, 3, -1],
+                       [1, -3, 3, -1],
+                       [1, -3, 3, -1],
+                       [1, -3, 3, -1]], dtype=np.float32))         # 26
+
+    k.append(np.array([[1, 1, 1, 1],
+                       [-3, -3, -3, -3],
+                       [3, 3, 3, 3],
+                       [-1, -1, -1, -1]], dtype=np.float32))       # 27
+
     return k
 
 # =========================
@@ -194,8 +202,7 @@ def build_header(num_kernels: int) -> List[str]:
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out_csv_path = os.path.join(OUTPUT_DIR, OUTPUT_CSV)
-
-    kernels = get_srm_kernels()
+    kernels = get_srm_kernels()[:20]
     num_k = len(kernels)
     header = build_header(num_k)
 
