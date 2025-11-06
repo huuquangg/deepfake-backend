@@ -12,3 +12,11 @@ venv/
 **/output
 **/*.h5
 **/*.csv
+**/*.jpeg
+**/*.jpg
+**/*.png
+**/*.mp4
+**/*.mkv
+**/*.wav
+**/*.wmv
+**/*.avi
