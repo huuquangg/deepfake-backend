@@ -4,15 +4,15 @@ import (
 	"net/http"
 )
 
-func SetupRoutes(h *Handler) http.Handler {
+func SetupRoutes(sessionHandler *Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check
-	mux.HandleFunc("/health", h.HealthCheck)
+	mux.HandleFunc("/health", sessionHandler.HealthCheck)
 
 	// Session endpoints
-	mux.HandleFunc("/api/v1/sessions", h.HandleSessions)
-	mux.HandleFunc("/api/v1/sessions/", h.HandleSession)
+	// mux.HandleFunc("/api/v1/sessions", h.HandleSessions)
+	// mux.HandleFunc("/api/v1/sessions/", h.HandleSession)
 
 	// Apply middleware
 	handler := LoggingMiddleware(mux)

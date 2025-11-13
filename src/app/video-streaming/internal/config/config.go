@@ -14,12 +14,6 @@ type Config struct {
 	WriteTimeout  time.Duration
 	MaxUploadSize int64
 
-	// Video Processing Config
-	FrameRate       int
-	JPEGQuality     int
-	CleanupWindow   time.Duration
-	CleanupInterval time.Duration
-
 	// PostgreSQL Config
 	PostgresHost     string
 	PostgresPort     int
@@ -32,17 +26,11 @@ type Config struct {
 func New() *Config {
 	return &Config{
 		// Server
-		ServerAddress: getEnv("SERVER_ADDRESS", ":8080"),
+		ServerAddress: getEnv("SERVER_ADDRESS", ":8081"),
 		TmpDir:        getEnv("TMP_DIR", "tmp"),
 		ReadTimeout:   getEnvAsDuration("READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:  getEnvAsDuration("WRITE_TIMEOUT", 30*time.Second),
 		MaxUploadSize: getEnvAsInt64("MAX_UPLOAD_SIZE", 500*1024*1024), // 500MB
-
-		// Video Processing
-		FrameRate:       getEnvAsInt("FRAME_RATE", 30),
-		JPEGQuality:     getEnvAsInt("JPEG_QUALITY", 10),
-		CleanupWindow:   getEnvAsDuration("CLEANUP_WINDOW", 30*time.Second),
-		CleanupInterval: getEnvAsDuration("CLEANUP_INTERVAL", 5*time.Second),
 
 		// PostgreSQL
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),

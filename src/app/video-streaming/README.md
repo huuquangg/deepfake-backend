@@ -307,3 +307,26 @@ MIT License - see LICENSE file for details
 - FFmpeg for video processing
 - PostgreSQL for data persistence
 - Go community for excellent libraries
+
+
+# Navigate to your project directory
+cd /home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/video-streaming
+
+# Make all scripts executable
+chmod +x scripts/*.sh
+
+# Step 1: Setup database (create DB and run migrations)
+./scripts/setup-db.sh
+
+# Or manually:
+createdb -U postgres streaming_db
+psql -U postgres -d streaming_db -f scripts/migrate.sql
+
+# Step 2: Build the application
+./scripts/build.sh
+
+# Step 3: Run the application
+./bin/video-streaming
+
+# OR run directly without building
+go run cmd/server/main.go

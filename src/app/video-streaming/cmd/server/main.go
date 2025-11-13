@@ -11,43 +11,38 @@ import (
 	"video-streaming/internal/api"
 	"video-streaming/internal/config"
 	"video-streaming/internal/db"
-	"video-streaming/internal/repository"
-	"video-streaming/internal/service"
+	repository "video-streaming/internal/repository"
+	service "video-streaming/internal/service"
 )
 
 func main() {
-	log.Println("Starting Video Streaming...")
+	log.Println("video-streaming server is starting...")
 
 	// Load configuration
-	cfg := config.New()
-
-	// Create base tmp directory
-	if err := os.MkdirAll(cfg.TmpDir, 0755); err != nil {
-		log.Fatalf("Failed to create tmp directory: %v", err)
-	}
+	configuration := config.New()
 
 	// Connect to PostgreSQL
-	dbConn, err := db.ConnectPostgres(cfg)
+	dbConnector, err := db.ConnectPostgres(configuration)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer dbConn.Close()
+	defer dbConnector.Close()
 	log.Println("Database connected successfully")
 
 	// Initialize repository
-	sessionRepo := repository.NewSessionRepository(dbConn)
+	sessionRepo := repository.NewSessionRepository(dbConnector)
 
 	// Initialize services
-	sessionService := service.NewSessionService(cfg, sessionRepo)
+	sessionService := service.NewSessionService(configuration, sessionRepo)
 
 	// Setup HTTP server
 	handler := api.NewHandler(sessionService)
 	router := api.SetupRoutes(handler)
-	server := api.NewHTTPServer(cfg, router)
+	server := api.NewHTTPServer(configuration, router)
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Server starting on %s", cfg.ServerAddress)
+		log.Printf("Server starting on %s", configuration.ServerAddress)
 		if err := server.ListenAndServe(); err != nil {
 			log.Fatalf("Server failed: %v", err)
 		}
@@ -59,11 +54,8 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
-
-	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
 	sessionService.Shutdown()
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
