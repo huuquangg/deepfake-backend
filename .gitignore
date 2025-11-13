@@ -9,6 +9,7 @@ venv/
 
 # Input/Output folders anywhere
 **/input
+**/bin
 **/output
 **/*.h5
 **/*.csv
