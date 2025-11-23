@@ -2,7 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"video-streaming/internal/dto"
@@ -11,8 +19,10 @@ import (
 
 type Handler struct {
 	sessionService *service.SessionService
+	frameCounters  sync.Map // map[sessionID]int64 - atomic counter per session
 }
 
+// Constructor for Handler
 func NewHandler(sessionService *service.SessionService) *Handler {
 	return &Handler{
 		sessionService: sessionService,
@@ -28,132 +38,222 @@ func (handler *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	handler.respondJSON(w, http.StatusOK, response)
 }
 
-// func (handler *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
-// 	sessionID := handler.extractSessionID(r.URL.Path)
-// 	if sessionID == "" {
-// 		handler.respondError(w, http.StatusBadRequest, "Session ID required")
-// 		return
-// 	}
+// UploadFrame godoc
+// @Summary      Upload a single frame image
+// @Description  Upload a frame image for a session with timestamp. Optimized for high throughput (20-30 fps)
+// @Tags         Frames
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        session_id  path      string  true  "Session ID"
+// @Param        frame       formData  file    true  "Frame image file"
+// @Success      200         {object}  dto.UploadFrameResponse
+// @Failure      400         {object}  dto.ErrorResponse
+// @Failure      500         {object}  dto.ErrorResponse
+// @Router       /api/v1/sessions/{session_id}/frames [post]
+func (handler *Handler) UploadFrame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
 
-// 	switch r.Method {
-// 	case http.MethodPost:
-// 		handler.UploadVideo(w, r, sessionID)
-// 	case http.MethodGet:
-// 		handler.GetSession(w, r, sessionID)
-// 	case http.MethodDelete:
-// 		handler.DeleteSession(w, r, sessionID)
-// 	default:
-// 		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-// 	}
-// }
+	// Extract session ID from URL path
+	sessionID := handler.extractSessionIDFromPath(r.URL.Path)
+	if sessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
 
-// func (handler *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
-// 	var req dto.CreateSessionRequest
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		handler.respondError(w, http.StatusBadRequest, "Invalid request body")
-// 		return
-// 	}
+	// Parse multipart form with 32MB max memory
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to parse form: %v", err))
+		return
+	}
 
-// 	if req.UserID == "" {
-// 		handler.respondError(w, http.StatusBadRequest, "user_id is required")
-// 		return
-// 	}
+	// Get the frame file
+	file, header, err := r.FormFile("frame")
+	if err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to get frame file: %v", err))
+		return
+	}
+	defer file.Close()
 
-// 	session, err := handler.sessionService.CreateSession(req.UserID)
-// 	if err != nil {
-// 		handler.respondError(w, http.StatusInternalServerError, err.Error())
-// 		return
-// 	}
+	// Validate file type
+	if !isValidImageType(header.Filename) {
+		handler.respondError(w, http.StatusBadRequest, "Invalid file type. Only JPEG/JPG images are allowed")
+		return
+	}
 
-// 	response := dto.CreateSessionResponse{
-// 		SessionID: session.ID,
-// 		Status:    session.Status,
-// 		CreatedAt: session.CreatedAt.Format(time.RFC3339),
-// 	}
+	// Create storage directory if with sessionId
+	storageDir := fmt.Sprintf("[Storage]/%s", sessionID)
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create storage directory: %v", err))
+		return
+	}
 
-// 	handler.respondJSON(w, http.StatusCreated, response)
-// }
+	// Generate filename with pattern: {SessionID}_{timestamp}_{counter}.jpeg
+	// Counter ensures no overwrites and maintains order
+	filename := handler.generateFrameFilename(sessionID)
+	filePath := filepath.Join(storageDir, filename)
 
-// func (handler *Handler) UploadVideo(w http.ResponseWriter, r *http.Request, sessionID string) {
-// 	session, exists := handler.sessionService.GetSession(sessionID)
-// 	if !exists {
-// 		handler.respondError(w, http.StatusNotFound, "Session not found")
-// 		return
-// 	}
+	// Create the file
+	destFile, err := os.Create(filePath)
+	if err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create file: %v", err))
+		return
+	}
+	defer destFile.Close()
 
-// 	// Save uploaded video
-// 	videoPath := filepathandler.Join(session.TmpDir, "input_video.mp4")
-// 	videoFile, err := os.Create(videoPath)
-// 	if err != nil {
-// 		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create video file: %v", err))
-// 		return
-// 	}
-// 	defer videoFile.Close()
+	// Copy the uploaded file to destination (optimized buffered copy)
+	if _, err := io.Copy(destFile, file); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save file: %v", err))
+		return
+	}
 
-// 	// Copy video data
-// 	_, err = io.Copy(videoFile, r.Body)
-// 	if err != nil {
-// 		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save video: %v", err))
-// 		return
-// 	}
+	log.Printf("Frame uploaded: %s for session %s", filename, sessionID)
 
-// 	log.Printf("Video uploaded for session %s", sessionID)
+	// Respond with success
+	response := dto.UploadFrameResponse{
+		Message:   "Frame uploaded successfully",
+		SessionID: sessionID,
+		FramePath: filePath,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
 
-// 	// Start extraction
-// 	if err := handler.sessionService.StartExtraction(sessionID, videoPath); err != nil {
-// 		handler.respondError(w, http.StatusInternalServerError, err.Error())
-// 		return
-// 	}
+	handler.respondJSON(w, http.StatusOK, response)
+}
 
-// 	response := dto.UploadVideoResponse{
-// 		Message:   "Video processing started",
-// 		SessionID: sessionID,
-// 		Status:    "processing",
-// 	}
+// UploadFrameBatch godoc
+// @Summary      Upload multiple frame images
+// @Description  Upload multiple frame images in a single request for better throughput
+// @Tags         Frames
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        session_id  path      string  true  "Session ID"
+// @Param        frames      formData  file    true  "Frame image files" multiple
+// @Success      200         {object}  dto.FrameUploadBatchResponse
+// @Failure      400         {object}  dto.ErrorResponse
+// @Failure      500         {object}  dto.ErrorResponse
+// @Router       /api/v1/sessions/{session_id}/frames/batch [post]
+func (handler *Handler) UploadFrameBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
 
-// 	handler.respondJSON(w, http.StatusOK, response)
-// }
+	// Extract session ID from URL path
+	sessionID := handler.extractSessionIDFromPath(r.URL.Path)
+	if sessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
 
-// func (handler *Handler) GetSession(w http.ResponseWriter, r *http.Request, sessionID string) {
-// 	session, exists := handler.sessionService.GetSession(sessionID)
-// 	if !exists {
-// 		handler.respondError(w, http.StatusNotFound, "Session not found")
-// 		return
-// 	}
+	// Parse multipart form with 128MB max memory for batch upload
+	if err := r.ParseMultipartForm(128 << 20); err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to parse form: %v", err))
+		return
+	}
 
-// 	response := dto.SessionDTO{
-// 		ID:        session.ID,
-// 		UserID:    session.UserID,
-// 		VideoPath: session.VideoPath,
-// 		Status:    session.Status,
-// 		CreatedAt: session.CreatedAt,
-// 		UpdatedAt: session.UpdatedAt,
-// 	}
+	// Create storage directory if not exists
+	storageDir := fmt.Sprintf("[Storage]/%s", sessionID)
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create storage directory: %v", err))
+		return
+	}
 
-// 	handler.respondJSON(w, http.StatusOK, response)
-// }
+	// Get all uploaded files
+	files := r.MultipartForm.File["frames"]
+	if len(files) == 0 {
+		handler.respondError(w, http.StatusBadRequest, "No frames provided")
+		return
+	}
 
-// func (handler *Handler) DeleteSession(w http.ResponseWriter, r *http.Request, sessionID string) {
-// 	if err := handler.sessionService.DeleteSession(sessionID); err != nil {
-// 		handler.respondError(w, http.StatusNotFound, err.Error())
-// 		return
-// 	}
+	// Process files concurrently for better performance
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	framePaths := make([]string, 0, len(files))
+	errorChan := make(chan error, len(files))
 
-// 	response := dto.SuccessResponse{
-// 		Message: "Session deleted successfully",
-// 	}
+	for _, fileHeader := range files {
+		wg.Add(1)
+		go func(fh *multipart.FileHeader) {
+			defer wg.Done()
 
-// 	handler.respondJSON(w, http.StatusOK, response)
-// }
+			// Validate file type
+			if !isValidImageType(fh.Filename) {
+				errorChan <- fmt.Errorf("invalid file type: %s", fh.Filename)
+				return
+			}
 
-// func (handler *Handler) extractSessionID(path string) string {
-// 	parts := strings.Split(strings.Trim(path, "/"), "/")
-// 	if len(parts) >= 4 {
-// 		return parts[3]
-// 	}
-// 	return ""
-// }
+			// Open the file
+			file, err := fh.Open()
+			if err != nil {
+				errorChan <- fmt.Errorf("failed to open file %s: %v", fh.Filename, err)
+				return
+			}
+			defer file.Close()
 
+			// Generate filename with counter to prevent overwrites
+			filename := handler.generateFrameFilename(sessionID)
+			filePath := filepath.Join(storageDir, filename)
+
+			// Create destination file
+			destFile, err := os.Create(filePath)
+			if err != nil {
+				errorChan <- fmt.Errorf("failed to create file %s: %v", filename, err)
+				return
+			}
+			defer destFile.Close()
+
+			// Copy file
+			if _, err := io.Copy(destFile, file); err != nil {
+				errorChan <- fmt.Errorf("failed to save file %s: %v", filename, err)
+				return
+			}
+
+			// Add to results
+			mu.Lock()
+			framePaths = append(framePaths, filePath)
+			mu.Unlock()
+		}(fileHeader)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errorChan)
+
+	// Check for errors
+	var errors []string
+	for err := range errorChan {
+		errors = append(errors, err.Error())
+	}
+
+	if len(errors) > 0 {
+		log.Printf("Batch upload errors: %v", errors)
+		// Return partial success if some files were uploaded
+		if len(framePaths) > 0 {
+			log.Printf("Partial success: %d/%d frames uploaded", len(framePaths), len(files))
+		}
+	}
+
+	if len(framePaths) == 0 {
+		handler.respondError(w, http.StatusInternalServerError, "Failed to upload any frames")
+		return
+	}
+
+	log.Printf("Batch upload complete: %d frames for session %s", len(framePaths), sessionID)
+
+	// Respond with success
+	response := dto.FrameUploadBatchResponse{
+		Message:       fmt.Sprintf("Uploaded %d frames successfully", len(framePaths)),
+		SessionID:     sessionID,
+		TotalUploaded: len(framePaths),
+		FramePaths:    framePaths,
+	}
+
+	handler.respondJSON(w, http.StatusOK, response)
+}
+
+// Helper methods for responses
 func (handler *Handler) respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -166,4 +266,45 @@ func (handler *Handler) respondError(w http.ResponseWriter, status int, message 
 		Message: message,
 		Code:    status,
 	})
+}
+
+// extractSessionIDFromPath extracts session ID from URL path
+func (handler *Handler) extractSessionIDFromPath(path string) string {
+	// Expected patterns:
+	// /api/v1/sessions/{session_id}/frames
+	// /api/v1/sessions/{session_id}/frames/batch
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for i, part := range parts {
+		if part == "sessions" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+// isValidImageType checks if the file has a valid image extension
+func isValidImageType(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".jpg" || ext == ".jpeg"
+}
+
+// generateFrameFilename generates a unique ordered filename for a frame
+// Pattern: {SessionID}_{timestamp}_{counter}.jpeg
+// This prevents overwrites and maintains insertion order
+func (handler *Handler) generateFrameFilename(sessionID string) string {
+	// Get or initialize counter for this session
+	var counter int64
+	if val, ok := handler.frameCounters.Load(sessionID); ok {
+		counter = val.(int64)
+	}
+
+	// Increment counter atomically
+	counter++
+	handler.frameCounters.Store(sessionID, counter)
+
+	// Generate filename with timestamp and counter
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	filename := fmt.Sprintf("%s_%d_%06d.jpeg", sessionID, timestamp, counter)
+
+	return filename
 }

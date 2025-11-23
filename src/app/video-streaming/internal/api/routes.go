@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 )
 
 func SetupRoutes(sessionHandler *Handler) http.Handler {
@@ -10,9 +11,17 @@ func SetupRoutes(sessionHandler *Handler) http.Handler {
 	// Health check
 	mux.HandleFunc("/health", sessionHandler.HealthCheck)
 
-	// Session endpoints
-	// mux.HandleFunc("/api/v1/sessions", h.HandleSessions)
-	// mux.HandleFunc("/api/v1/sessions/", h.HandleSession)
+	// Frame upload endpoints
+	mux.HandleFunc("/api/v1/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		// Route to appropriate handler based on path
+		if strings.Contains(r.URL.Path, "/frames/batch") {
+			sessionHandler.UploadFrameBatch(w, r)
+		} else if strings.Contains(r.URL.Path, "/frames") {
+			sessionHandler.UploadFrame(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
 
 	// Apply middleware
 	handler := LoggingMiddleware(mux)
