@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 
+	"core-banking/internal/dto"
 	"core-banking/internal/models"
 	"core-banking/internal/repository"
 	"core-banking/internal/utils"
@@ -37,7 +38,7 @@ type LoginRequest struct {
 // AuthResponse - Kết quả trả về sau khi login/register
 type AuthResponse struct {
     Token string       `json:"token"`
-    User  *models.User `json:"user"`
+    User  *dto.UserDTO `json:"user"`
 }
 
 // Register - Đăng ký user mới
@@ -86,11 +87,12 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
     if err != nil {
         return nil, err
     }
+    // 7. Convert sang DTO và trả về kết quả
+    userDTO := dto.ToUserDTO(user)
     
-    // 7. Trả về kết quả
     return &AuthResponse{
         Token: token,
-        User:  user,
+        User:  userDTO,
     }, nil
 }
 
@@ -116,10 +118,13 @@ func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
     if err != nil {
         return nil, err
     }
+   // 7. Convert sang DTO và trả về kết quả
+    userDTO := dto.ToUserDTO(user)
     
-    // 4. Trả về kết quả
     return &AuthResponse{
         Token: token,
-        User:  user,
+        User:  userDTO,
     }, nil
 }
+
+ 
