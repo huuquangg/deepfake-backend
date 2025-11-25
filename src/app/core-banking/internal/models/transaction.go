@@ -14,16 +14,18 @@ type Transaction struct {
 	CompletedAt     *time.Time `json:"completed_at,omitempty"`
 }
 
-// TransferRequest is the payload for money transfer
-type TransferRequest struct {
-	ToAccountNumber string  `json:"to_account_number"`
-	Amount          float64 `json:"amount"`
-	Description     string  `json:"description"`
-	FaceImageBase64 string  `json:"face_image_base64"` // For deepfake detection
+// TransactionRequest is the payload for transactions (transfer, withdraw, deposit)
+type TransactionRequest struct {
+    Type            string  `json:"type"`              // "TRANSFER", "WITHDRAW", "DEPOSIT"
+    ToAccountNumber string  `json:"to_account_number"` // For TRANSFER only
+    Amount          float64 `json:"amount"`
+    Description     string  `json:"description"`
+    FaceImageBase64 string  `json:"face_image_base64"` // For deepfake detection
 }
 
+
 // TransferResponse is the response after transfer
-type TransferResponse struct {
+type TransactionResponse struct {
 	Transaction Transaction `json:"transaction"`
 	Message     string      `json:"message"`
 	Success     bool        `json:"success"`
