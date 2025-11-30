@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  openface-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: openface-extraction-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/input:/data/input
+      - ./data/output:/data/output
+      - /tmp/openface:/tmp/openface
+    environment:
+      - OPENFACE_BINARY=/usr/local/bin/FeatureExtraction
+      - TEMP_DIR=/tmp/openface
+      - OUTPUT_DIR=/data/output
+      - PORT=8000
+      - HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
