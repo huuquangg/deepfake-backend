@@ -1,0 +1,37 @@
+# Multi-stage build for Batch OpenFace Feature Extraction API
+FROM openface/openface:latest AS base
+
+# Install Python dependencies (use existing Python 3.6)
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install Python dependencies
+WORKDIR /app
+
+# Additional dependencies for batch processing (Python 3.6 compatible versions)
+RUN pip install --no-cache-dir \
+    fastapi==0.68.2 \
+    uvicorn==0.15.0 \
+    python-multipart==0.0.5 \
+    pandas==1.1.5 \
+    numpy==1.19.5
+
+# Copy application code
+COPY batch_api.py /app/batch_api.py
+
+# Create necessary directories
+RUN mkdir -p /tmp/openface_batch /data/batch_output
+
+# Expose port
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" || exit 1
+
+# Run the application
+CMD ["python3", "batch_api.py"]
