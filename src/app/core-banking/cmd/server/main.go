@@ -1,74 +1,59 @@
 package main
 
 import (
-	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"core-banking/internal/api"
+	"core-banking/internal/config"
+	"core-banking/internal/db"
 	"core-banking/internal/repository"
 	"core-banking/internal/service"
-
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 )
 
 func main() {
-	// 1. Load .env file
-	if err := godotenv.Load("/Applications/Tien/deepfakeFrontendBackend/deepfake-backend/.env"); err != nil {
-		log.Println("Warning: .env file not found")
-	}
+	log.Println("core-banking server is starting...")
 
-	// 2. Kết nối database
-	dbHost := os.Getenv("POSTGRES_HOST")
-	dbPort := os.Getenv("POSTGRES_PORT")
-	dbUser := os.Getenv("POSTGRES_USER")
-	dbPassword := os.Getenv("POSTGRES_PASSWORD")
-	dbName := os.Getenv("POSTGRES_DB")
+	// Load configuration
+	cfg := config.New()
 
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		dbHost, dbPort, dbUser, dbPassword, dbName)
-
-	db, err := sql.Open("postgres", connStr)
+	// Connect to PostgreSQL
+	database, err := db.ConnectPostgres(cfg)
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer database.Close()
+	log.Println("Database connected successfully")
 
-	// Test connection
-	if err := db.Ping(); err != nil {
-		log.Fatal("Failed to ping database:", err)
-	}
-	log.Println("✅ Connected to database successfully!")
+	// Initialize Repository layer
+	userRepo := repository.NewUserRepository(database)
+	accountRepo := repository.NewAccountRepository(database)
+	transactionRepo := repository.NewTransactionRepository(database)
 
-	// 3. Khởi tạo Repository layer
-	userRepo := repository.NewUserRepository(db)
-	accountRepo := repository.NewAccountRepository(db)
-	transactionRepo := repository.NewTransactionRepository(db)
-
-	// 4. Khởi tạo Service layer
+	// Initialize Service layer
 	accountService := service.NewAccountService(accountRepo)
-	authService := service.NewAuthService(userRepo)  
+	authService := service.NewAuthService(userRepo)
 	transactionService := service.NewTransactionService(transactionRepo, accountRepo)
 
-	// 5. Khởi tạo Handler layer
+	// Initialize Handler layer
 	authHandler := api.NewAuthHandler(authService)
 	accountHandler := api.NewAccountHandler(accountService)
 	transactionHandler := api.NewTransactionHandler(transactionService)
 
-	// 6. Setup routes
+	// Setup routes
 	mux := api.SetupRoutes(authHandler, accountHandler, transactionHandler)
 
-	// 7. Start server
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "8085"
+	// Configure HTTP server
+	server := &http.Server{
+		Addr:         cfg.ServerAddress,
+		Handler:      mux,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
 	}
 
-	log.Printf("🚀 Server is running on port %s\n", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal("Failed to start server:", err)
+	// Start server
+	log.Printf("Server starting on %s", cfg.ServerAddress)
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("Server failed: %v", err)
 	}
 }

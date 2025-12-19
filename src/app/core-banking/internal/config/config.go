@@ -9,10 +9,8 @@ import (
 type Config struct {
 	// Server Config
 	ServerAddress string
-	TmpDir        string
 	ReadTimeout   time.Duration
 	WriteTimeout  time.Duration
-	MaxUploadSize int64
 
 	// PostgreSQL Config
 	PostgresHost     string
@@ -27,11 +25,9 @@ type Config struct {
 func New() *Config {
 	return &Config{
 		// Server
-		ServerAddress: getEnv("SERVER_ADDRESS", ":8091"),
-		TmpDir:        getEnv("TMP_DIR", "tmp"),
+		ServerAddress: getEnv("SERVER_ADDRESS", ":8090"),
 		ReadTimeout:   getEnvAsDuration("READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:  getEnvAsDuration("WRITE_TIMEOUT", 30*time.Second),
-		MaxUploadSize: getEnvAsInt64("MAX_UPLOAD_SIZE", 500*1024*1024), // 500MB
 
 		// PostgreSQL
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
@@ -39,7 +35,7 @@ func New() *Config {
 		PostgresUser:     getEnv("POSTGRES_USER", "postgres"),
 		PostgresPassword: getEnv("POSTGRES_PASSWORD", "P@ssw0rd123"),
 		PostgresDB:       getEnv("POSTGRES_DB", "postgres"),
-		PostgresSchema:   getEnv("POSTGRES_SCHEMA", "video_streaming"),
+		PostgresSchema:   getEnv("POSTGRES_SCHEMA", "core_banking"),
 		PostgresSSLMode:  getEnv("POSTGRES_SSL_MODE", "disable"),
 	}
 }
@@ -54,15 +50,6 @@ func getEnv(key, defaultValue string) string {
 func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
-func getEnvAsInt64(key string, defaultValue int64) int64 {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return intValue
 		}
 	}
