@@ -9,10 +9,14 @@ func SetupRoutes(sessionHandler *Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check
-	mux.HandleFunc("/health", sessionHandler.HealthCheck)
+	mux.HandleFunc("/api/video-streaming/health", sessionHandler.HealthCheck)
 
-	// Frame upload endpoints
-	mux.HandleFunc("/api/v1/sessions/", func(w http.ResponseWriter, r *http.Request) {
+	// Aggregator endpoints
+	mux.HandleFunc("/api/video-streaming/ingest/frame", sessionHandler.IngestFrame)
+	mux.HandleFunc("/api/video-streaming/stats/aggregator", sessionHandler.GetAggregatorStats)
+
+	// Frame upload endpoints (legacy)
+	mux.HandleFunc("/api/video-streaming/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Route to appropriate handler based on path
 		if strings.Contains(r.URL.Path, "/frames/batch") {
 			sessionHandler.UploadFrameBatch(w, r)

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"video-streaming/internal/aggregator"
 	"video-streaming/internal/dto"
 	"video-streaming/internal/service"
 )
@@ -20,12 +21,14 @@ import (
 type Handler struct {
 	sessionService *service.SessionService
 	frameCounters  sync.Map // map[sessionID]int64 - atomic counter per session
+	aggregator     *aggregator.Aggregator
 }
 
 // Constructor for Handler
-func NewHandler(sessionService *service.SessionService) *Handler {
+func NewHandler(sessionService *service.SessionService, agg *aggregator.Aggregator) *Handler {
 	return &Handler{
 		sessionService: sessionService,
+		aggregator:     agg,
 	}
 }
 
@@ -79,7 +82,7 @@ func (handler *Handler) UploadFrame(w http.ResponseWriter, r *http.Request) {
 
 	// Validate file type
 	if !isValidImageType(header.Filename) {
-		handler.respondError(w, http.StatusBadRequest, "Invalid file type. Only JPEG/JPG images are allowed")
+		handler.respondError(w, http.StatusBadRequest, "Invalid file type. Only JPEG/JPG/PNG images are allowed")
 		return
 	}
 
@@ -285,7 +288,7 @@ func (handler *Handler) extractSessionIDFromPath(path string) string {
 // isValidImageType checks if the file has a valid image extension
 func isValidImageType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".jpg" || ext == ".jpeg"
+	return ext == ".jpg" || ext == ".jpeg" || ext == ".png"
 }
 
 // generateFrameFilename generates a unique ordered filename for a frame
@@ -307,4 +310,88 @@ func (handler *Handler) generateFrameFilename(sessionID string) string {
 	filename := fmt.Sprintf("%s_%d_%06d.jpeg", sessionID, timestamp, counter)
 
 	return filename
+}
+
+// IngestFrame godoc
+// @Summary      Ingest a single frame for aggregation
+// @Description  Non-blocking endpoint that accepts a frame and adds it to the aggregation buffer
+// @Tags         Frames
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        session_id  formData  string  true   "Session ID"
+// @Param        frame       formData  file    true   "Frame image file"
+// @Success      200         {object}  dto.UploadFrameResponse
+// @Failure      400         {object}  dto.ErrorResponse
+// @Failure      500         {object}  dto.ErrorResponse
+// @Router       /api/video-streaming/ingest/frame [post]
+func (handler *Handler) IngestFrame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse multipart form with 32MB max memory
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to parse form: %v", err))
+		return
+	}
+
+	// Get session_id from form
+	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+
+	// Get the frame file
+	file, header, err := r.FormFile("frame")
+	if err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to get frame file: %v", err))
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	if !isValidImageType(header.Filename) {
+		handler.respondError(w, http.StatusBadRequest, "Invalid file type. Only JPEG/JPG/PNG images are allowed")
+		return
+	}
+
+	// Read file into memory
+	frameData, err := io.ReadAll(file)
+	if err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to read frame: %v", err))
+		return
+	}
+
+	// Generate unique filename
+	filename := handler.generateFrameFilename(sessionID)
+
+	// Ingest frame into aggregator (non-blocking)
+	if err := handler.aggregator.IngestFrame(sessionID, frameData, filename); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to ingest frame: %v", err))
+		return
+	}
+
+	// Return immediately (non-blocking)
+	response := dto.UploadFrameResponse{
+		Message:   "Frame ingested successfully",
+		SessionID: sessionID,
+		FramePath: filename,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	handler.respondJSON(w, http.StatusOK, response)
+}
+
+// GetAggregatorStats godoc
+// @Summary      Get aggregator statistics
+// @Description  Returns current aggregator state including active sessions and buffered frames
+// @Tags         Stats
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /api/video-streaming/stats/aggregator [get]
+func (handler *Handler) GetAggregatorStats(w http.ResponseWriter, r *http.Request) {
+	stats := handler.aggregator.GetSessionStats()
+	handler.respondJSON(w, http.StatusOK, stats)
 }

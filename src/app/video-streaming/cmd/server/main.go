@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"video-streaming/internal/aggregator"
 	"video-streaming/internal/api"
 	"video-streaming/internal/config"
 	"video-streaming/internal/db"
@@ -35,8 +36,33 @@ func main() {
 	// Initialize services
 	sessionService := service.NewSessionService(configuration, sessionRepo)
 
+	// Initialize aggregator
+	aggConfig := &aggregator.Config{
+		BatchSize:           configuration.AggBatchSize,
+		MaxFramesPerSession: configuration.AggMaxFramesPerSession,
+		FlushInterval:       configuration.AggFlushInterval,
+		SessionTTL:          configuration.AggSessionTTL,
+		WorkerPoolSize:      configuration.AggWorkerPoolSize,
+		RequestTimeout:      configuration.AggRequestTimeout,
+
+		// Feature Extraction APIs
+		OpenFaceAPIURL: configuration.OpenFaceAPIURL,
+		// DeepfakeAPIURL:      configuration.DeepfakeAPIURL, // Uncomment when API available
+		EnableFeatureFusion: configuration.EnableFeatureFusion,
+
+		// RabbitMQ
+		RabbitMQURL:        configuration.RabbitMQURL,
+		RabbitMQExchange:   configuration.RabbitMQExchange,
+		RabbitMQQueue:      configuration.RabbitMQQueue,
+		RabbitMQRoutingKey: configuration.RabbitMQRoutingKey,
+		RabbitMQEnabled:    configuration.RabbitMQEnabled,
+	}
+	frameAggregator := aggregator.NewAggregator(aggConfig)
+	frameAggregator.Start()
+	log.Println("Frame aggregator initialized and started")
+
 	// Setup HTTP server
-	handler := api.NewHandler(sessionService)
+	handler := api.NewHandler(sessionService, frameAggregator)
 	router := api.SetupRoutes(handler)
 	server := api.NewHTTPServer(configuration, router)
 
@@ -56,6 +82,10 @@ func main() {
 	log.Println("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Shutdown aggregator first
+	frameAggregator.Stop()
+
 	sessionService.Shutdown()
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)

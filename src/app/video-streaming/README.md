@@ -1,332 +1,95 @@
-# Video Streaming Frame Extraction Service
+```md
+## Implementation and Constraints (Go In-Memory Aggregator → FastAPI `/extract/batch`)
 
-A production-ready Go service for streaming video and extracting frames at 30fps using FFmpeg with PostgreSQL persistence and automatic cleanup.
+### Implementation (Step-by-Step)
 
-## 🚀 Features
+1. **Expose an ingestion endpoint in Go**
+   - Create `POST /ingest/frame` that accepts `multipart/form-data`:
+     - `frame` (single image file, e.g., JPEG)
+     - `session_id` (string)
+     - optional: `frame_idx` or timestamp for ordering/debug
+   - The handler must be **non-blocking**: read the uploaded file into memory, push it to the aggregator, return `200 OK` immediately.
 
-- ✅ Real-time video frame extraction at 30fps
-- ✅ FFmpeg integration with MJPEG codec
-- ✅ UUID-based frame naming
-- ✅ Automatic cleanup with 30-second sliding window
-- ✅ PostgreSQL database for session persistence
-- ✅ RESTful API with proper DTOs
-- ✅ Repository pattern for data access
-- ✅ Multiple concurrent session support
-- ✅ Structured logging and error handling
-- ✅ Docker support
-- ✅ Clean architecture following Go best practices
+2. **Maintain an in-memory buffer per session**
+   - Use a thread-safe map:
+     - `map[session_id]*SessionState`
+   - `SessionState` contains:
+     - `Frames []Frame` (each `Frame` stores `[]byte` + filename + timestamp)
+     - `LastSeen time.Time` (last frame arrival)
+     - `LastFlushed time.Time` (last batch dispatch time)
 
-## 📁 Project Structure
+3. **Append frames and enforce a sliding window**
+   - On each incoming frame:
+     - Append to `SessionState.Frames`
+     - Update `LastSeen`
+     - If `len(Frames) > MaxFramesPerSession` (e.g., 60), drop older frames and keep the newest (sliding window) to prevent backlog and reduce latency.
 
+4. **Flush logic: frame-count trigger**
+   - If `len(Frames) >= BatchSize` (BatchSize = 30):
+     - Extract a batch of frames (either FIFO first 30, or newest 30 depending on design)
+     - Remove them from the session buffer
+     - Dispatch the batch asynchronously (goroutine or worker pool)
+
+5. **Flush logic: time-based trigger (timeout)**
+   - Run a background ticker (e.g., every 100–250 ms) that checks each active session:
+     - If `now - LastFlushed >= FlushInterval` (e.g., 1 second) and `len(Frames) > 0`:
+       - Flush up to 30 frames (or all current frames)
+       - Clear flushed frames from the buffer
+       - Update `LastFlushed`
+       - Dispatch asynchronously
+   - This keeps latency stable even when frames are dropped or network jitter occurs.
+
+6. **Batch forwarding to FastAPI (multipart upload)**
+   - For each batch, build `multipart/form-data`:
+     - Add `session_id` as a form field
+     - Add `cleanup=true` (or configurable)
+     - Add repeated `files` parts (one per frame), matching FastAPI:
+       - `files: List[UploadFile] = File(...)`
+   - Send `POST http://<fastapi-host>:8001/extract/batch` using a reused `http.Client` (keep-alive) and a strict timeout (e.g., 2–5 seconds).
+   - Do not block ingestion while waiting for FastAPI; use async dispatch.
+
+7. **Concurrency control (recommended)**
+   - Instead of unbounded goroutines, use a bounded **worker pool**:
+     - `jobs chan BatchJob`
+     - `N` workers read jobs and call FastAPI
+   - This prevents resource spikes under high concurrency.
+
+8. **Session cleanup (TTL)**
+   - In the same background loop (or a separate cleanup loop):
+     - If `now - LastSeen > SessionTTL` (e.g., 3–5 seconds), delete the session and free memory.
+   - This prevents memory leaks when a user disconnects or stops streaming.
+
+---
+
+### Constraints and Guarantees
+
+- **API compatibility constraint**
+  - FastAPI `/extract/batch` only accepts `multipart/form-data` with `files: List[UploadFile]`.
+  - Therefore, the aggregator must always forward frames as repeated `files` fields (not a single video stream).
+
+- **Latency constraint**
+  - The system targets near real-time behavior; buffering must be bounded to ≈1 second.
+  - When extraction is slower than ingestion, the design must prioritize freshness (drop old frames) over accumulating delay.
+
+- **Memory constraint (bounded memory)**
+  - Memory usage must be capped by:
+    - `MaxFramesPerSession` (e.g., 60)
+    - `MaxSessions` (configurable upper bound)
+    - `SessionTTL` cleanup
+  - This prevents unbounded growth over time and under abnormal client behavior.
+
+- **Backpressure constraint**
+  - If the FastAPI service is slow/unavailable, the aggregator must not indefinitely queue batches.
+  - Use a bounded job queue; if full, drop or degrade (e.g., keep newest frames, discard backlog).
+
+- **Ordering constraint (optional)**
+  - If strict frame ordering is required, the client must include `frame_idx`, and the aggregator should sort or enforce monotonicity before batching.
+  - If not required, frames can be batched in arrival order for lower overhead.
+
+- **Reliability constraint**
+  - The ingestion path should remain responsive even if extraction fails.
+  - Failures in batch forwarding should not block `/ingest/frame`; error handling should be isolated to the dispatch layer.
+
+- **Security/abuse constraint**
+  - Enforce upload size limits per frame and rate limits per session to mitigate overload or abuse.
 ```
-video-streaming/
-├── cmd/server/              # Application entry point
-├── internal/
-│   ├── api/                # HTTP handlers, routes, middleware
-│   ├── config/             # Configuration management
-│   ├── db/                 # Database connection
-│   ├── dto/                # Data Transfer Objects
-│   ├── models/             # Domain models
-│   ├── repository/         # Data access layer
-│   └── service/            # Business logic
-├── pkg/ffmpeg/             # Reusable FFmpeg utilities
-├── scripts/                # Build, test, and migration scripts
-├── docker-compose.yml      # Docker Compose configuration
-├── Dockerfile              # Docker image definition
-├── Makefile                # Build automation
-└── README.md               # This file
-```
-
-## 🛠️ Prerequisites
-
-- **Go 1.24+**
-- **PostgreSQL 14+**
-- **FFmpeg** (with MJPEG support)
-- **Docker** (optional)
-
-### Install Dependencies
-
-**FFmpeg:**
-```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Verify
-make check-ffmpeg
-```
-
-**PostgreSQL:**
-```bash
-# Ubuntu/Debian
-sudo apt install postgresql postgresql-contrib
-
-# macOS
-brew install postgresql
-```
-
-## 🚀 Quick Start
-
-### Option 1: Local Setup
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/huuquangdang/video-streaming.git
-cd video-streaming
-
-# 2. Install dependencies
-make install-deps
-
-# 3. Setup environment
-cp .env.example .env
-# Edit .env with your configuration
-
-# 4. Setup database
-createdb streaming_db
-make migrate
-
-# 5. Build and run
-make build
-./bin/video-streaming
-```
-
-### Option 2: Docker Setup
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/huuquangdang/video-streaming.git
-cd video-streaming
-
-# 2. Run with Docker Compose
-make docker-run
-
-# 3. Check logs
-make docker-logs
-
-# 4. Stop
-make docker-down
-```
-
-## 📖 API Documentation
-
-Base URL: `http://localhost:8080`
-
-### Health Check
-
-```bash
-GET /health
-```
-
-Response:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-11-08T09:22:20Z",
-  "version": "1.0.0"
-}
-```
-
-### Create Session
-
-```bash
-POST /api/v1/sessions
-Content-Type: application/json
-
-{
-  "user_id": "user123"
-}
-```
-
-Response:
-```json
-{
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "ready",
-  "created_at": "2025-11-08T09:22:20Z"
-}
-```
-
-### Upload Video
-
-```bash
-POST /api/v1/sessions/{session_id}
-Content-Type: video/mp4
-
-[Binary video data]
-```
-
-Response:
-```json
-{
-  "message": "Video processing started",
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "processing"
-}
-```
-
-### Get Session
-
-```bash
-GET /api/v1/sessions/{session_id}
-```
-
-Response:
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "user_id": "user123",
-  "video_path": "/tmp/.../input_video.mp4",
-  "status": "processing",
-  "created_at": "2025-11-08T09:22:20Z",
-  "updated_at": "2025-11-08T09:23:00Z"
-}
-```
-
-### Delete Session
-
-```bash
-DELETE /api/v1/sessions/{session_id}
-```
-
-Response:
-```json
-{
-  "message": "Session deleted successfully"
-}
-```
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-make test
-
-# Run specific package tests
-go test -v ./internal/service/...
-
-# Run with coverage
-go test -cover ./...
-```
-
-## ⚙️ Configuration
-
-Configuration is done via environment variables. See `.env.example`:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SERVER_ADDRESS` | `:8080` | Server address |
-| `TMP_DIR` | `tmp` | Temporary directory for frames |
-| `FRAME_RATE` | `30` | Frames per second extraction |
-| `JPEG_QUALITY` | `10` | JPEG quality (2-31, higher = lower) |
-| `CLEANUP_WINDOW` | `30s` | Frame retention time |
-| `CLEANUP_INTERVAL` | `5s` | Cleanup check interval |
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
-| `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_USER` | `postgres` | PostgreSQL user |
-| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password |
-| `POSTGRES_DB` | `streaming_db` | PostgreSQL database name |
-
-## 🐳 Docker Commands
-
-```bash
-# Build image
-make docker-build
-
-# Run with docker-compose
-make docker-run
-
-# View logs
-make docker-logs
-
-# Stop containers
-make docker-down
-```
-
-## 📝 Development
-
-```bash
-# Format code
-make fmt
-
-# Run linter
-make lint
-
-# Build
-make build
-
-# Run in development mode
-make dev
-
-# Clean build artifacts
-make clean
-```
-
-## 🗃️ Database Schema
-
-```sql
--- Sessions table
-CREATE TABLE sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    video_path TEXT,
-    status TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
--- Frames table (optional)
-CREATE TABLE frames (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    filename TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL
-);
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
-## 👤 Author
-
-**quang-dang_opswat**
-
-## 🙏 Acknowledgments
-
-- FFmpeg for video processing
-- PostgreSQL for data persistence
-- Go community for excellent libraries
-
-
-# Navigate to your project directory
-cd /home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/video-streaming
-
-# Make all scripts executable
-chmod +x scripts/*.sh
-
-# Step 1: Setup database (create DB and run migrations)
-./scripts/setup-db.sh
-
-# Or manually:
-createdb -U postgres streaming_db
-psql -U postgres -d streaming_db -f scripts/migrate.sql
-
-# Step 2: Build the application
-./scripts/build.sh
-
-# Step 3: Run the application
-./bin/video-streaming
-
-# OR run directly without building
-go run cmd/server/main.go

@@ -11,22 +11,22 @@ func SetupRoutes(authHandler *AuthHandler, accountHandler *AccountHandler, trans
 
 	// AUTH ROUTES
 	// Public routes (không cần JWT)
-	mux.HandleFunc("/api/auth/register", authHandler.Register)
-	mux.HandleFunc("/api/auth/login", authHandler.Login)
+	mux.HandleFunc("/api/core-banking/auth/register", authHandler.Register)
+	mux.HandleFunc("/api/core-banking/auth/login", authHandler.Login)
 
 	// Protected routes (cần JWT)
-	mux.Handle("/api/auth/me", middleware.AuthMiddleware(http.HandlerFunc(authHandler.GetMe)))
+	mux.Handle("/api/core-banking/auth/me", middleware.AuthMiddleware(http.HandlerFunc(authHandler.GetMe)))
 
 	// ACCOUNT ROUTES 
 	// Protected routes (cần JWT)
-	mux.Handle("/api/account/create", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.CreateAccount)))
-	mux.Handle("/api/account/info", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.GetMyAccount)))
-	mux.Handle("/api/account/balance", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.GetBalance)))
+	mux.Handle("/api/core-banking/account/create", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.CreateAccount)))
+	mux.Handle("/api/core-banking/account/info", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.GetMyAccount)))
+	mux.Handle("/api/core-banking/account/balance", middleware.AuthMiddleware(http.HandlerFunc(accountHandler.GetBalance)))
 
 	// TRANSACTION ROUTES 
 	// Protected routes (cần JWT)
-	mux.Handle("/api/transaction/transfer", middleware.AuthMiddleware(http.HandlerFunc(transactionHandler.Transfer)))
-	mux.Handle("/api/transaction/history", middleware.AuthMiddleware(http.HandlerFunc(transactionHandler.GetTransactionHistory)))
+	mux.Handle("/api/core-banking/transaction/transfer", middleware.AuthMiddleware(http.HandlerFunc(transactionHandler.Transfer)))
+	mux.Handle("/api/core-banking/transaction/history", middleware.AuthMiddleware(http.HandlerFunc(transactionHandler.GetTransactionHistory)))
 
 	return mux
 }

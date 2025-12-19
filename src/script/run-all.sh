@@ -27,8 +27,12 @@ cleanup() {
         fi
     done
     
-    # Stop Docker Compose services
-    cd "$APP_DIR/openface-extraction" 2>/dev/null && docker compose down 2>/dev/null
+    # Stop Docker Compose services (all compose files)
+    cd "$APP_DIR/openface-extraction" 2>/dev/null && {
+        docker compose -f docker-compose.yml down 2>/dev/null
+        docker compose -f docker-compose.api.yml down 2>/dev/null
+        docker compose -f docker-compose.batch.yml down 2>/dev/null
+    }
     cd "$APP_DIR/video-streaming" 2>/dev/null && docker compose down 2>/dev/null
     
     echo -e "${GREEN}All services stopped${NC}"
@@ -41,7 +45,9 @@ trap cleanup SIGINT SIGTERM EXIT
 # Function to check if service uses Docker
 uses_docker() {
     local service_dir=$1
-    if [ -f "$service_dir/docker-compose.yml" ]; then
+    if [ -f "$service_dir/docker-compose.yml" ] || \
+       [ -f "$service_dir/docker-compose.api.yml" ] || \
+       [ -f "$service_dir/docker-compose.batch.yml" ]; then
         return 0
     fi
     return 1
@@ -65,57 +71,50 @@ run_docker_service() {
     
     cd "$service_dir"
     
-    if [ -f "docker-compose.yml" ]; then
-        # First, stop any existing containers and remove orphans
-        if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-            echo -e "  Cleaning up existing containers..."
-            docker compose down --remove-orphans -v 2>/dev/null
+    # Find all docker-compose files
+    local compose_files=(docker-compose.yml docker-compose.api.yml docker-compose.batch.yml)
+    local started_any=false
+    
+    for compose_file in "${compose_files[@]}"; do
+        if [ -f "$compose_file" ]; then
+            echo -e "  Found $compose_file..."
             
-            # Force remove any conflicting containers
-            local containers=$(docker ps -a --filter "name=$service_name" -q 2>/dev/null)
-            if [ -n "$containers" ]; then
-                echo -e "  Removing conflicting containers..."
-                docker rm -f $containers 2>/dev/null
-            fi
-            
-            # Also check for common container names
-            docker rm -f openface 2>/dev/null
-            docker rm -f batch-deepfake-api 2>/dev/null
-            docker rm -f openface-extraction-api 2>/dev/null
-            
-            # Start the service
-            docker compose up -d --remove-orphans
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}✓ $service_name started (Docker Compose)${NC}\n"
+            # First, stop any existing containers and remove orphans
+            if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+                echo -e "  Cleaning up existing containers for $compose_file..."
+                docker compose -f "$compose_file" down --remove-orphans -v 2>/dev/null
+                
+                # Start the service
+                docker compose -f "$compose_file" up -d --remove-orphans
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}✓ $service_name started with $compose_file${NC}"
+                    started_any=true
+                else
+                    echo -e "${RED}✗ Failed to start $service_name with $compose_file${NC}"
+                fi
+            elif command -v docker-compose &> /dev/null; then
+                echo -e "  Cleaning up existing containers for $compose_file..."
+                docker-compose -f "$compose_file" down --remove-orphans -v 2>/dev/null
+                
+                # Start the service
+                docker-compose -f "$compose_file" up -d --remove-orphans
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}✓ $service_name started with $compose_file${NC}"
+                    started_any=true
+                else
+                    echo -e "${RED}✗ Failed to start $service_name with $compose_file${NC}"
+                fi
             else
-                echo -e "${RED}✗ Failed to start $service_name${NC}\n"
+                echo -e "${RED}✗ Docker Compose not found${NC}\n"
+                return 1
             fi
-        elif command -v docker-compose &> /dev/null; then
-            echo -e "  Cleaning up existing containers..."
-            docker-compose down --remove-orphans -v 2>/dev/null
-            
-            # Force remove any conflicting containers
-            local containers=$(docker ps -a --filter "name=$service_name" -q 2>/dev/null)
-            if [ -n "$containers" ]; then
-                echo -e "  Removing conflicting containers..."
-                docker rm -f $containers 2>/dev/null
-            fi
-            
-            # Also check for common container names
-            docker rm -f openface 2>/dev/null
-            docker rm -f batch-deepfake-api 2>/dev/null
-            docker rm -f openface-extraction-api 2>/dev/null
-            
-            # Start the service
-            docker-compose up -d --remove-orphans
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}✓ $service_name started (docker-compose)${NC}\n"
-            else
-                echo -e "${RED}✗ Failed to start $service_name${NC}\n"
-            fi
-        else
-            echo -e "${RED}✗ Docker Compose not found${NC}\n"
         fi
+    done
+    
+    if [ "$started_any" = true ]; then
+        echo -e "${GREEN}✓ $service_name Docker services started${NC}\n"
+    else
+        echo -e "${YELLOW}⚠ No docker-compose files found for $service_name${NC}\n"
     fi
 }
 
