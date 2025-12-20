@@ -15,6 +15,9 @@ func SetupRoutes(sessionHandler *Handler) http.Handler {
 	mux.HandleFunc("/api/video-streaming/ingest/frame", sessionHandler.IngestFrame)
 	mux.HandleFunc("/api/video-streaming/stats/aggregator", sessionHandler.GetAggregatorStats)
 
+	// Serve stored frames (Option 2: static file serving)
+	mux.HandleFunc("/frames/", sessionHandler.ServeFrame)
+
 	// Frame upload endpoints (legacy)
 	mux.HandleFunc("/api/video-streaming/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Route to appropriate handler based on path

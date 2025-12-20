@@ -49,29 +49,77 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-def read_csv_data(csv_path: str) -> Dict[str, Any]:
+def of_fixed_columns() -> List[str]:
     """
-    Read all data from OpenFace CSV output
+    Define the 674 fixed OpenFace feature columns
+    
+    Returns:
+        List of column names for the 674 features
+    """
+    cols: List[str] = []
+    cols += ["frame", "face_id", "timestamp", "confidence", "success"]
+    cols += ["gaze_0_x","gaze_0_y","gaze_0_z","gaze_1_x","gaze_1_y","gaze_1_z","gaze_angle_x","gaze_angle_y"]
+    cols += [f"eye_lmk_x_{i}" for i in range(56)]
+    cols += [f"eye_lmk_y_{i}" for i in range(56)]
+    cols += [f"eye_lmk_X_{i}" for i in range(56)]
+    cols += [f"eye_lmk_Y_{i}" for i in range(56)]
+    cols += [f"eye_lmk_Z_{i}" for i in range(56)]
+    cols += ["pose_Tx","pose_Ty","pose_Tz","pose_Rx","pose_Ry","pose_Rz"]
+    cols += [f"x_{i}" for i in range(68)]
+    cols += [f"y_{i}" for i in range(68)]
+    cols += [f"X_{i}" for i in range(68)]
+    cols += [f"Y_{i}" for i in range(68)]
+    cols += [f"Z_{i}" for i in range(68)]
+    au_r = ["AU01","AU02","AU04","AU05","AU06","AU07","AU09","AU10","AU12","AU14","AU15","AU17","AU20","AU23","AU25","AU26","AU45"]
+    au_c = ["AU01","AU02","AU04","AU05","AU06","AU07","AU09","AU10","AU12","AU14","AU15","AU17","AU20","AU23","AU25","AU26","AU28","AU45"]
+    cols += [f"{a}_r" for a in au_r]
+    cols += [f"{a}_c" for a in au_c]
+    return cols
+
+
+def read_csv_data(csv_path: str, frame_index: int = -1) -> Dict[str, Any]:
+    """
+    Read OpenFace CSV output and filter to 674 fixed features
     
     Args:
         csv_path: Path to CSV file
+        frame_index: 0-based frame index for alignment (optional)
     
     Returns:
-        Dictionary containing headers and row data
+        Dictionary containing headers, frame_index, and row data (filtered to 674 features)
     """
     try:
-        df = pd.read_csv(csv_path)
+        # Read CSV - OpenFace uses space or comma separator
+        df = pd.read_csv(csv_path, sep=None, engine='python')
+        
+        # Get the 674 fixed columns
+        fixed_cols = of_fixed_columns()
+        
+        # Strip whitespace from column names for matching
+        df.columns = df.columns.str.strip()
+        
+        # Filter dataframe to only include columns that exist in both df and fixed_cols
+        # Preserve order from fixed_cols
+        available_cols = [col for col in fixed_cols if col in df.columns]
+        
+        if not available_cols:
+            logger.warning(f"No matching columns found in {csv_path}. Available columns: {df.columns.tolist()[:10]}...")
+            df_filtered = df  # Fallback to original if no matches
+        else:
+            df_filtered = df[available_cols]
+            logger.info(f"Filtered {len(df.columns)} columns down to {len(available_cols)} columns")
         
         # Convert to dictionary format
         data = {
             "filename": os.path.basename(csv_path),
-            "headers": df.columns.tolist(),
-            "num_rows": len(df),
-            "num_columns": len(df.columns),
-            "data": df.to_dict(orient='records')  # List of dicts, one per row
+            "frame_index": frame_index,  # 0-based frame index for alignment
+            "headers": df_filtered.columns.tolist(),
+            "num_rows": len(df_filtered),
+            "num_columns": len(df_filtered.columns),
+            "data": df_filtered.to_dict(orient='records')  # List of dicts, one per row
         }
         
-        logger.info(f"Read CSV: {data['num_rows']} rows, {data['num_columns']} columns from {data['filename']}")
+        logger.info(f"Read CSV: {data['num_rows']} rows, {data['num_columns']} columns (filtered from {len(df.columns)}) from {data['filename']}")
         return data
         
     except Exception as e:
@@ -225,9 +273,9 @@ async def extract_batch(
         # Step 4: Read CSV data from all files
         csv_data_list = []
         
-        for csv_file in sorted(csv_files):
+        for idx, csv_file in enumerate(sorted(csv_files)):
             try:
-                csv_data = read_csv_data(csv_file)
+                csv_data = read_csv_data(csv_file, frame_index=idx)
                 csv_data_list.append(csv_data)
                     
             except Exception as e:

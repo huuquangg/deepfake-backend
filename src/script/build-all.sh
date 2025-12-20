@@ -28,6 +28,8 @@ APP_DIR="$PROJECT_ROOT/src/app"
 GO_BUILT=0
 DOCKER_BUILT=0
 DOCKER_SKIPPED=0
+PYTHON_READY=0
+CONSUMER_READY=0
 SKIPPED=0
 
 # Function to check if service uses Docker
@@ -43,6 +45,24 @@ uses_docker() {
 is_go_service() {
     local service_dir=$1
     if [ -f "$service_dir/go.mod" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to check if service is a Python service
+is_python_service() {
+    local service_dir=$1
+    if [ -f "$service_dir/requirements.txt" ] && [ -f "$service_dir/batch_api.py" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to check if service is a consumer service
+is_consumer_service() {
+    local service_dir=$1
+    if [ -f "$service_dir/requirements.txt" ] && [ -f "$service_dir/consumer.py" ]; then
         return 0
     fi
     return 1
@@ -144,6 +164,27 @@ build_go_service() {
     fi
 }
 
+# Function to check Python service dependencies
+check_python_service() {
+    local service_name=$1
+    local service_dir=$2
+    
+    echo -e "${BLUE}Checking Python service: $service_name...${NC}"
+    
+    cd "$service_dir"
+    
+    # Check if requirements.txt exists
+    if [ -f "requirements.txt" ]; then
+        echo -e "  Found requirements.txt"
+        echo -e "  ${YELLOW}Note: Install dependencies with: pip install -r requirements.txt${NC}"
+        echo -e "${GREEN}✓ $service_name ready (Python service - no build needed)${NC}\n"
+        ((PYTHON_READY++))
+    else
+        echo -e "${RED}✗ requirements.txt not found for $service_name${NC}\n"
+        return 0
+    fi
+}
+
 # Build services
 cd "$APP_DIR"
 
@@ -159,6 +200,13 @@ for service in */; do
     # Check if it's a Go service
     elif is_go_service "$service_path"; then
         build_go_service "$service_name" "$service_path"
+    # Check if it's a consumer service
+    elif is_consumer_service "$service_path"; then
+        check_python_service "$service_name" "$service_path"
+        ((CONSUMER_READY++))
+    # Check if it's a Python service
+    elif is_python_service "$service_path"; then
+        check_python_service "$service_name" "$service_path"
     else
         echo -e "${YELLOW}$service_name - no build configuration found - skipping${NC}\n"
         ((SKIPPED++))
@@ -170,6 +218,8 @@ echo -e "${GREEN}Summary:${NC}"
 echo -e "  - Docker images built: $DOCKER_BUILT"
 echo -e "  - Docker images skipped: $DOCKER_SKIPPED"
 echo -e "  - Go binaries built: $GO_BUILT"
+echo -e "  - Python services ready: $PYTHON_READY"
+echo -e "  - Consumer services ready: $CONSUMER_READY"
 echo -e "  - Skipped: $SKIPPED"
 
 if [ $DOCKER_SKIPPED -gt 0 ]; then

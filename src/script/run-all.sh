@@ -62,6 +62,24 @@ is_go_service() {
     return 1
 }
 
+# Function to check if service is a Python service
+is_python_service() {
+    local service_dir=$1
+    if [ -f "$service_dir/requirements.txt" ] && [ -f "$service_dir/batch_api.py" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to check if service is a consumer service
+is_consumer_service() {
+    local service_dir=$1
+    if [ -f "$service_dir/requirements.txt" ] && [ -f "$service_dir/consumer.py" ]; then
+        return 0
+    fi
+    return 1
+}
+
 # Function to run Docker service
 run_docker_service() {
     local service_name=$1
@@ -150,9 +168,81 @@ run_go_service() {
     fi
 }
 
+# Function to run Python service
+run_python_service() {
+    local service_name=$1
+    local service_dir=$2
+    
+    echo -e "${YELLOW}Starting Python service: $service_name...${NC}"
+    
+    cd "$service_dir"
+    
+    # Check if batch_api.py exists
+    if [ -f "batch_api.py" ]; then
+        mkdir -p logs
+        # Run in background and capture PID
+        python3 batch_api.py > "logs/$service_name.log" 2>&1 &
+        local pid=$!
+        PIDS+=("$pid")
+        SERVICE_NAMES+=("$service_name")
+        
+        # Wait a moment to check if it started successfully
+        sleep 2
+        if kill -0 "$pid" 2>/dev/null; then
+            echo -e "${GREEN}✓ $service_name started (PID: $pid)${NC}"
+            echo -e "  Log: $service_dir/logs/$service_name.log\n"
+        else
+            echo -e "${RED}✗ $service_name failed to start${NC}\n"
+            echo -e "  Check log: $service_dir/logs/$service_name.log\n"
+        fi
+    else
+        echo -e "${RED}✗ batch_api.py not found in $service_dir${NC}\n"
+    fi
+}
+
+# Function to run consumer service
+run_consumer_service() {
+    local service_name=$1
+    local service_dir=$2
+    
+    echo -e "${YELLOW}Starting Consumer service: $service_name...${NC}"
+    
+    cd "$service_dir"
+    
+    # Check if consumer.py exists
+    if [ -f "consumer.py" ]; then
+        mkdir -p logs
+        
+        # Check if start script exists
+        if [ -f "start_consumer.sh" ]; then
+            ./start_consumer.sh > "logs/$service_name.log" 2>&1 &
+        else
+            python3 consumer.py > "logs/$service_name.log" 2>&1 &
+        fi
+        
+        local pid=$!
+        PIDS+=("$pid")
+        SERVICE_NAMES+=("$service_name")
+        
+        # Wait a moment to check if it started successfully (consumers need more time to load models)
+        sleep 5
+        if kill -0 "$pid" 2>/dev/null; then
+            echo -e "${GREEN}✓ $service_name consumer started (PID: $pid)${NC}"
+            echo -e "  Log: $service_dir/logs/$service_name.log\n"
+        else
+            echo -e "${RED}✗ $service_name consumer failed to start${NC}\n"
+            echo -e "  Check log: $service_dir/logs/$service_name.log\n"
+        fi
+    else
+        echo -e "${RED}✗ consumer.py not found in $service_dir${NC}\n"
+    fi
+}
+
 # Create logs directories
 mkdir -p "$APP_DIR/core-banking/logs"
 mkdir -p "$APP_DIR/video-streaming/logs"
+mkdir -p "$APP_DIR/frequency-extraction/logs"
+mkdir -p "$APP_DIR/deepfake-detection/logs"
 
 # Run services
 cd "$APP_DIR"
@@ -167,12 +257,18 @@ for service in */; do
     # Check if it's a Go service
     elif is_go_service "$service_path"; then
         run_go_service "$service_name" "$service_path"
+    # Check if it's a consumer service
+    elif is_consumer_service "$service_path"; then
+        run_consumer_service "$service_name" "$service_path"
+    # Check if it's a Python service
+    elif is_python_service "$service_path"; then
+        run_python_service "$service_name" "$service_path"
     fi
 done
 
 echo -e "${GREEN}=== All Services Started ===${NC}"
 echo -e "${GREEN}Summary:${NC}"
-echo -e "  - Running services: ${#SERVICE_NAMES[@]} Go binaries"
+echo -e "  - Running services: ${#SERVICE_NAMES[@]} (Go + Python + Consumers)"
 echo -e "  - Docker services: Check with 'docker compose ps' in service directories"
 echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 

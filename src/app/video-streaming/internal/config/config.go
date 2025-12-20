@@ -32,9 +32,14 @@ type Config struct {
 	AggRequestTimeout      time.Duration // HTTP request timeout (default: 5s)
 
 	// Feature Extraction APIs
-	OpenFaceAPIURL string // OpenFace API URL
-	// DeepfakeAPIURL       string // Deepfake detection API URL (uncomment when API available)
+	OpenFaceAPIURL    string // OpenFace API URL
+	FrequencyAPIURL   string // Frequency-domain feature extraction API URL
 	EnableFeatureFusion bool // Enable multi-feature fusion
+
+	// Frame Storage (for Option 2: publish frame pointers)
+	FrameStorageDir   string // Directory to persist frames for consumer fetching
+	FrameBaseURL      string // Base URL for serving frames (e.g. http://localhost:8091/frames)
+	EnableFrameStorage bool  // Enable frame persistence and pointer publishing
 
 	// RabbitMQ Config
 	RabbitMQURL          string // RabbitMQ connection URL
@@ -71,9 +76,14 @@ func New() *Config {
 		AggRequestTimeout:      getEnvAsDuration("AGG_REQUEST_TIMEOUT", 5*time.Second),
 
 		// Feature Extraction APIs
-		OpenFaceAPIURL: getEnv("OPENFACE_API_URL", "http://localhost:8001/extract/batch"),
-		// DeepfakeAPIURL:      getEnv("DEEPFAKE_API_URL", "http://localhost:8002/detect/batch"), // Uncomment when API available
+		OpenFaceAPIURL:      getEnv("OPENFACE_API_URL", "http://localhost:8001/extract/batch"),
+		FrequencyAPIURL:     getEnv("FREQUENCY_API_URL", "http://localhost:8092/extract/batch"),
 		EnableFeatureFusion: getEnvAsBool("ENABLE_FEATURE_FUSION", true),
+
+		// Frame Storage
+		FrameStorageDir:    getEnv("FRAME_STORAGE_DIR", "Storage/frames"),
+		FrameBaseURL:       getEnv("FRAME_BASE_URL", "http://localhost:8091/frames"),
+		EnableFrameStorage: getEnvAsBool("ENABLE_FRAME_STORAGE", true),
 
 		// RabbitMQ
 		RabbitMQURL:        getEnv("RABBITMQ_URL", "amqp://admin:P@ssw0rd123@localhost:5672/"),

@@ -51,7 +51,7 @@ RUN apt-get update -qq && apt-get install -qq -y \
 ##        llvm clang-3.7 libc++-dev libc++abi-dev  \
 ## ==================== Building dlib ===========================
 
-RUN curl http://dlib.net/files/dlib-19.13.tar.bz2 -LO &&\
+RUN curl --http1.1 --retry 3 --retry-delay 2 http://dlib.net/files/dlib-19.13.tar.bz2 -LO &&\
     tar xf dlib-19.13.tar.bz2 && \
     rm dlib-19.13.tar.bz2 &&\
     mv dlib-19.13 dlib &&\

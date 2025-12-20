@@ -3,10 +3,13 @@ package aggregator
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -44,9 +47,15 @@ type Config struct {
 	RequestTimeout      time.Duration // HTTP request timeout (default: 5s)
 
 	// Feature Extraction APIs
-	OpenFaceAPIURL string // OpenFace API URL
-	// DeepfakeAPIURL      string // Deepfake detection API URL (uncomment when API available)
+	OpenFaceAPIURL  string // OpenFace API URL
+	FrequencyAPIURL string // Frequency-domain feature extraction API URL
+	EmbeddingAPIURL string // CNN embedding extraction API URL (MobileNetV2)
 	EnableFeatureFusion bool // Enable multi-feature fusion
+
+	// Frame Storage (Option 2: publish frame pointers)
+	FrameStorageDir    string // Directory to persist frames
+	FrameBaseURL       string // Base URL for serving frames
+	EnableFrameStorage bool   // Enable frame persistence
 
 	// RabbitMQ Config
 	RabbitMQURL        string // RabbitMQ connection URL
@@ -68,6 +77,16 @@ type Aggregator struct {
 	rabbitChan *amqp.Channel
 }
 
+
+
+// FrameRef holds per-frame storage pointer (Option 2: publish URLs/paths)
+type FrameRef struct {
+	FrameIndex int    `json:"frame_index"` // 0-based frame index for alignment
+	Filename   string `json:"filename"`    // Frame filename (e.g. frame_0000.jpg)
+	RelPath    string `json:"rel_path"`    // Relative path from storage root (e.g. session_id/batch_id/frame_0000.jpg)
+	URI        string `json:"uri"`         // Full HTTP URI to fetch frame
+}
+
 // FeatureResult holds results from a single feature extraction API
 type FeatureResult struct {
 	APIName  string                 `json:"api_name"`
@@ -77,14 +96,15 @@ type FeatureResult struct {
 
 // FusedFeatures holds combined results from all APIs
 type FusedFeatures struct {
-	SessionID    string        `json:"session_id"`
-	BatchID      string        `json:"batch_id"`
-	Timestamp    time.Time     `json:"timestamp"`
-	FrameCount   int           `json:"frame_count"`
-	OpenFace     FeatureResult `json:"openface,omitempty"`
-	Deepfake     FeatureResult `json:"deepfake,omitempty"`
-	Fused        interface{}   `json:"fused,omitempty"`        // Combined/fused features
-	ProcessingMS int64         `json:"processing_ms"`
+	SessionID    string                   `json:"session_id"`
+	BatchID      string                   `json:"batch_id,omitempty"`
+	Timestamp    time.Time                `json:"timestamp"`
+	FrameCount   int                      `json:"frame_count"`
+	FrameRefs    []FrameRef               `json:"frame_refs"`  // Per-frame storage pointers (Option 2)
+	Features     []map[string]interface{} `json:"features"`    // Concatenated feature data (frequency + openface) with frame_index
+	ProcessingMS int64                    `json:"processing_ms"`
+	OpenFace     FeatureResult            `json:"-"` // Internal use only
+	Frequency    FeatureResult            `json:"-"` // Internal use only
 }
 
 // NewAggregator creates a new frame aggregator
@@ -419,22 +439,27 @@ func (a *Aggregator) processBatch(workerID int, job BatchJob) {
 			}()
 		}
 
-		// Call Deepfake API (uncomment when API is available)
-		// if a.config.DeepfakeAPIURL != "" {
-		// 	wg.Add(1)
-		// 	go func() {
-		// 		defer wg.Done()
-		// 		result := a.callFeatureAPI(workerID, "Deepfake", a.config.DeepfakeAPIURL, job)
-		// 		mu.Lock()
-		// 		fusedResult.Deepfake = result
-		// 		mu.Unlock()
-		// 	}()
-		// }
+		// Call Frequency API
+		if a.config.FrequencyAPIURL != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				result := a.callFeatureAPI(workerID, "Frequency", a.config.FrequencyAPIURL, job)
+				mu.Lock()
+				fusedResult.Frequency = result
+				mu.Unlock()
+			}()
+		}
 
 		wg.Wait()
 
-		// Fuse the features after both APIs return
-		fusedResult.Fused = a.fuseFeatures(fusedResult.OpenFace, fusedResult.Deepfake)
+		// Fuse the features after all APIs return
+		fusedResult.Features = a.fuseFeatures(fusedResult.OpenFace, fusedResult.Frequency)
+		
+		// Persist frames to disk and build frame pointers (Option 2)
+		if a.config.EnableFrameStorage {
+			fusedResult.FrameRefs = a.persistFramesAndBuildRefs(workerID, job, batchID)
+		}
 	} else {
 		// fusedResult.OpenFace = a.callFeatureAPI(workerID, "OpenFace", a.config.OpenFaceAPIURL, job)
 	}
@@ -541,52 +566,141 @@ func countAPIs(fused *FusedFeatures) int {
 	if fused.OpenFace.APIName != "" {
 		count++
 	}
-	if fused.Deepfake.APIName != "" {
+	if fused.Frequency.APIName != "" {
 		count++
 	}
 	return count
 }
 
-// fuseFeatures combines features from multiple APIs
-// This is where you implement your fusion logic
-func (a *Aggregator) fuseFeatures(openface, deepfake FeatureResult) interface{} {
-	fused := make(map[string]interface{})
+// fuseFeatures combines features from multiple APIs by concatenating csv_data.data arrays
+// Strategy: Frequency features first, then OpenFace features
+// Now injects frame_index (0-based) and normalized filename into each row for stable alignment
+// This creates a single array of feature rows for efficient RabbitMQ publishing
+func (a *Aggregator) fuseFeatures(openface, frequency FeatureResult) []map[string]interface{} {
+	var fusedData []map[string]interface{}
+	frequencyRowCount := 0
+	openfaceRowCount := 0
 
-	// Combine OpenFace features
+	// Extract csv_data array from Frequency API response
+	if frequency.Error == "" && len(frequency.Features) > 0 {
+		if csvDataArray, ok := frequency.Features["csv_data"].([]interface{}); ok {
+			for _, csvDataItem := range csvDataArray {
+				if csvDataMap, ok := csvDataItem.(map[string]interface{}); ok {
+					// Extract frame_index and filename from csv metadata
+					frameIndex := -1
+					filename := ""
+					if idx, ok := csvDataMap["frame_index"].(float64); ok {
+						frameIndex = int(idx)
+					}
+					if fname, ok := csvDataMap["filename"].(string); ok {
+						filename = fname
+					}
+					
+					if dataArray, ok := csvDataMap["data"].([]interface{}); ok {
+						// Add each row from frequency csv_data.data
+						for _, row := range dataArray {
+							if rowMap, ok := row.(map[string]interface{}); ok {
+								// Add alignment keys and source indicator
+								rowMap["frame_index"] = frameIndex
+								rowMap["filename"] = filename
+								rowMap["_source"] = "frequency"
+								fusedData = append(fusedData, rowMap)
+								frequencyRowCount++
+							}
+						}
+					}
+				}
+			}
+		} else {
+			log.Printf("Warning: Frequency API response missing csv_data array")
+		}
+	} else if frequency.Error != "" {
+		log.Printf("Warning: Frequency API error: %s", frequency.Error)
+	}
+
+	// Extract csv_data array from OpenFace API response
 	if openface.Error == "" && len(openface.Features) > 0 {
-		fused["openface_features"] = openface.Features
-		fused["openface_available"] = true
-	} else {
-		fused["openface_available"] = false
-		if openface.Error != "" {
-			fused["openface_error"] = openface.Error
+		if csvDataArray, ok := openface.Features["csv_data"].([]interface{}); ok {
+			for _, csvDataItem := range csvDataArray {
+				if csvDataMap, ok := csvDataItem.(map[string]interface{}); ok {
+					// Extract frame_index and filename from csv metadata
+					frameIndex := -1
+					filename := ""
+					if idx, ok := csvDataMap["frame_index"].(float64); ok {
+						frameIndex = int(idx)
+					}
+					if fname, ok := csvDataMap["filename"].(string); ok {
+						filename = fname
+					}
+					
+					if dataArray, ok := csvDataMap["data"].([]interface{}); ok {
+						// Add each row from openface csv_data.data
+						for _, row := range dataArray {
+							if rowMap, ok := row.(map[string]interface{}); ok {
+								// Add alignment keys and source indicator
+								rowMap["frame_index"] = frameIndex
+								rowMap["filename"] = filename
+								rowMap["_source"] = "openface"
+								fusedData = append(fusedData, rowMap)
+								openfaceRowCount++
+							}
+						}
+					}
+				}
+			}
+		} else {
+			log.Printf("Warning: OpenFace API response missing csv_data array")
 		}
+	} else if openface.Error != "" {
+		log.Printf("Warning: OpenFace API error: %s", openface.Error)
 	}
 
-	// Combine Deepfake features
-	if deepfake.Error == "" && len(deepfake.Features) > 0 {
-		fused["deepfake_features"] = deepfake.Features
-		fused["deepfake_available"] = true
-	} else {
-		fused["deepfake_available"] = false
-		if deepfake.Error != "" {
-			fused["deepfake_error"] = deepfake.Error
-		}
+	log.Printf("Feature fusion complete: %d frequency rows + %d openface rows = %d total rows",
+		frequencyRowCount, openfaceRowCount, len(fusedData))
+
+	return fusedData
+}
+
+// persistFramesAndBuildRefs saves batch frames to disk and builds FrameRef pointers
+func (a *Aggregator) persistFramesAndBuildRefs(workerID int, job BatchJob, batchID string) []FrameRef {
+	var frameRefs []FrameRef
+
+	// Create storage directory: <FrameStorageDir>/<session_id>/<batch_id>/
+	batchDir := filepath.Join(a.config.FrameStorageDir, job.SessionID, batchID)
+	if err := os.MkdirAll(batchDir, 0755); err != nil {
+		log.Printf("Worker %d: Failed to create batch directory %s: %v", workerID, batchDir, err)
+		return frameRefs
 	}
 
-	// Add fusion metadata
-	fused["fusion_strategy"] = "concatenation" // or "weighted_average", "attention", etc.
-	fused["fusion_timestamp"] = time.Now()
+	// Persist each frame and build FrameRef
+	for idx, frame := range job.Frames {
+		filename := frame.Filename
+		if filename == "" {
+			filename = fmt.Sprintf("frame_%04d.jpg", idx)
+		}
 
-	// TODO: Implement your custom fusion logic here
-	// Examples:
-	// - Concatenate feature vectors
-	// - Weighted averaging
-	// - Attention-based fusion
-	// - Neural network-based fusion
-	// - Statistical fusion (mean, max, etc.)
+		framePath := filepath.Join(batchDir, filename)
+		
+		// Write frame bytes to disk
+		if err := os.WriteFile(framePath, frame.Data, 0644); err != nil {
+			log.Printf("Worker %d: Failed to write frame %s: %v", workerID, framePath, err)
+			continue
+		}
 
-	return fused
+		// Build relative path and URI
+		relPath := filepath.Join(job.SessionID, batchID, filename)
+		uri := fmt.Sprintf("%s/%s/%s/%s", a.config.FrameBaseURL, job.SessionID, batchID, filename)
+
+		frameRefs = append(frameRefs, FrameRef{
+			FrameIndex: idx,
+			Filename:   filename,
+			RelPath:    relPath,
+			URI:        uri,
+		})
+	}
+
+	log.Printf("Worker %d: Persisted %d frames to %s", workerID, len(frameRefs), batchDir)
+	return frameRefs
 }
 
 // GetSessionStats returns current session statistics

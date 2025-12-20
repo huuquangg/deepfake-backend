@@ -100,6 +100,34 @@ clean_go_service() {
     echo -e "${GREEN}✓ $service_name cleaned${NC}\n"
 }
 
+# Function to clean Python service
+clean_python_service() {
+    local service_name=$1
+    local service_dir=$2
+    
+    echo -e "${YELLOW}Cleaning Python service: $service_name...${NC}"
+    
+    cd "$service_dir"
+    
+    # Remove logs
+    if [ -d "logs" ] && [ "$(ls -A logs 2>/dev/null)" ]; then
+        echo -e "  Removing logs..."
+        rm -rf logs/*.log 2>/dev/null
+        ((CLEANED_LOGS++))
+    fi
+    
+    # Remove Python cache
+    if [ -d "__pycache__" ]; then
+        echo -e "  Removing Python cache..."
+        rm -rf __pycache__
+    fi
+    
+    # Remove temporary files
+    rm -rf /tmp/frequency_batch/* 2>/dev/null
+    
+    echo -e "${GREEN}✓ $service_name cleaned${NC}\n"
+}
+
 # Function to check if service uses Docker
 uses_docker() {
     local service_dir=$1
@@ -118,11 +146,21 @@ is_go_service() {
     return 1
 }
 
+# Function to check if service is a Python service
+is_python_service() {
+    local service_dir=$1
+    if [ -f "$service_dir/requirements.txt" ] && [ -f "$service_dir/batch_api.py" ]; then
+        return 0
+    fi
+    return 1
+}
+
 echo -e "${YELLOW}Step 1: Stopping running services...${NC}\n"
 
 # Stop services by known ports
 stop_service_by_port 8090 "core-banking"
 stop_service_by_port 8091 "video-streaming"
+stop_service_by_port 8092 "frequency-extraction"
 
 echo ""
 
@@ -143,6 +181,11 @@ for service in */; do
     # Check if it's a Go service
     if is_go_service "$service_path"; then
         clean_go_service "$service_name" "$service_path"
+    fi
+    
+    # Check if it's a Python service
+    if is_python_service "$service_path"; then
+        clean_python_service "$service_name" "$service_path"
     fi
 done
 

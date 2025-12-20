@@ -46,9 +46,14 @@ func main() {
 		RequestTimeout:      configuration.AggRequestTimeout,
 
 		// Feature Extraction APIs
-		OpenFaceAPIURL: configuration.OpenFaceAPIURL,
-		// DeepfakeAPIURL:      configuration.DeepfakeAPIURL, // Uncomment when API available
+		OpenFaceAPIURL:      configuration.OpenFaceAPIURL,
+		FrequencyAPIURL:     configuration.FrequencyAPIURL,
 		EnableFeatureFusion: configuration.EnableFeatureFusion,
+
+		// Frame Storage
+		FrameStorageDir:    configuration.FrameStorageDir,
+		FrameBaseURL:       configuration.FrameBaseURL,
+		EnableFrameStorage: configuration.EnableFrameStorage,
 
 		// RabbitMQ
 		RabbitMQURL:        configuration.RabbitMQURL,
@@ -62,7 +67,7 @@ func main() {
 	log.Println("Frame aggregator initialized and started")
 
 	// Setup HTTP server
-	handler := api.NewHandler(sessionService, frameAggregator)
+	handler := api.NewHandler(sessionService, frameAggregator, configuration)
 	router := api.SetupRoutes(handler)
 	server := api.NewHTTPServer(configuration, router)
 

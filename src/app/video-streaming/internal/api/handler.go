@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"video-streaming/internal/aggregator"
+	"video-streaming/internal/config"
 	"video-streaming/internal/dto"
 	"video-streaming/internal/service"
 )
@@ -22,13 +23,15 @@ type Handler struct {
 	sessionService *service.SessionService
 	frameCounters  sync.Map // map[sessionID]int64 - atomic counter per session
 	aggregator     *aggregator.Aggregator
+	config         *config.Config
 }
 
 // Constructor for Handler
-func NewHandler(sessionService *service.SessionService, agg *aggregator.Aggregator) *Handler {
+func NewHandler(sessionService *service.SessionService, agg *aggregator.Aggregator, cfg *config.Config) *Handler {
 	return &Handler{
 		sessionService: sessionService,
 		aggregator:     agg,
+		config:         cfg,
 	}
 }
 
@@ -394,4 +397,66 @@ func (handler *Handler) IngestFrame(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) GetAggregatorStats(w http.ResponseWriter, r *http.Request) {
 	stats := handler.aggregator.GetSessionStats()
 	handler.respondJSON(w, http.StatusOK, stats)
+}
+
+// ServeFrame godoc
+// @Summary      Serve stored frame image
+// @Description  Serves frame images from disk storage (Option 2 frame pointers)
+// @Tags         Frames
+// @Produce      image/jpeg
+// @Param        session_id  path      string  true  "Session ID"
+// @Param        batch_id    path      string  true  "Batch ID"
+// @Param        filename    path      string  true  "Frame filename"
+// @Success      200  {file}  binary
+// @Failure      404  {object}  dto.ErrorResponse
+// @Failure      500  {object}  dto.ErrorResponse
+// @Router       /frames/{session_id}/{batch_id}/{filename} [get]
+func (handler *Handler) ServeFrame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse path: /frames/<session_id>/<batch_id>/<filename>
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/frames/"), "/")
+	if len(pathParts) != 3 {
+		handler.respondError(w, http.StatusBadRequest, "Invalid frame path format. Expected /frames/<session_id>/<batch_id>/<filename>")
+		return
+	}
+
+	sessionID := pathParts[0]
+	batchID := pathParts[1]
+	filename := pathParts[2]
+
+	// Sanitize inputs to prevent path traversal
+	if strings.Contains(sessionID, "..") || strings.Contains(batchID, "..") || strings.Contains(filename, "..") {
+		handler.respondError(w, http.StatusBadRequest, "Invalid path: contains path traversal")
+		return
+	}
+
+	// Build file path from storage config
+	storageDir := handler.config.FrameStorageDir
+	framePath := filepath.Join(storageDir, sessionID, batchID, filename)
+
+	// Check if file exists
+	fileInfo, err := os.Stat(framePath)
+	if os.IsNotExist(err) {
+		handler.respondError(w, http.StatusNotFound, fmt.Sprintf("Frame not found: %s", filename))
+		return
+	}
+	if err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error accessing frame: %v", err))
+		return
+	}
+
+	// Ensure it's a file, not directory
+	if fileInfo.IsDir() {
+		handler.respondError(w, http.StatusBadRequest, "Path is a directory, not a file")
+		return
+	}
+
+	// Serve the file
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=3600")  // Cache for 1 hour
+	http.ServeFile(w, r, framePath)
 }

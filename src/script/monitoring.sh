@@ -17,6 +17,7 @@ APP_DIR="$PROJECT_ROOT/src/app"
 declare -A SERVICE_PORTS=(
     ["core-banking"]=8090
     ["video-streaming"]=8091
+    ["frequency-extraction"]=8092
 )
 
 declare -A DOCKER_SERVICES=(
