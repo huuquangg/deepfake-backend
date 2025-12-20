@@ -7,6 +7,7 @@ type Transaction struct {
 	TransactionID   string    `json:"transaction_id"`
 	FromAccountID   int       `json:"from_account_id"`
 	ToAccountNumber string    `json:"to_account_number"`
+	ToAccountID     *int       `json:"to_account_id,omitempty"` 
 	Amount          float64   `json:"amount"`
 	Description     string    `json:"description"`
 	Status          string    `json:"status"`

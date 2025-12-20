@@ -32,7 +32,7 @@ func main() {
 
 	// Initialize Service layer
 	accountService := service.NewAccountService(accountRepo)
-	authService := service.NewAuthService(userRepo)
+	authService := service.NewAuthService(userRepo, accountRepo)
 	transactionService := service.NewTransactionService(transactionRepo, accountRepo)
 
 	// Initialize Handler layer
