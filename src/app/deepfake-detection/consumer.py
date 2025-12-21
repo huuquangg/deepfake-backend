@@ -21,11 +21,16 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+import asyncio
+import threading
+
 import cv2
 import joblib
 import numpy as np
 import pika
 import requests
+import socketio
+from aiohttp import web
 from tensorflow import keras
 
 logging.basicConfig(
@@ -58,6 +63,13 @@ class Config:
         "SCALER_PATH",
         "/home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/deepfake-detection/csv_scaler.pkl",
     )
+
+    # Socket.IO Server (Option B: Backend is server, mobile is client)
+    socketio_enabled: bool = _env_bool("SOCKETIO_ENABLED", True)
+    socketio_host: str = os.getenv("SOCKETIO_HOST", "0.0.0.0")
+    socketio_port: int = int(os.getenv("SOCKETIO_PORT", "8093"))
+    socketio_event: str = os.getenv("SOCKETIO_EVENT", "prediction")
+    socketio_use_rooms: bool = _env_bool("SOCKETIO_USE_ROOMS", True)  # Session-based room filtering
 
     # Input specs
     sequence_length: int = int(os.getenv("SEQUENCE_LENGTH", "15"))
@@ -329,7 +341,6 @@ class InputBuilder:
         features = message.get("features", []) or []
 
         # log the features 
-        print("features (pretty) =", json.dumps(features, ensure_ascii=False, indent=2))
 
         window_start = self._compute_window_start(frame_refs, features)
         window_indices = list(range(window_start, window_start + self._cfg.sequence_length))
@@ -488,6 +499,16 @@ class DeepfakeConsumer:
         self.messages_processed = 0
         self.predictions_made = 0
         self.errors = 0
+        
+        # Socket.IO server (Option B: backend is server)
+        self._sio_server: Optional[socketio.AsyncServer] = None
+        self._sio_app: Optional[web.Application] = None
+        self._sio_runner: Optional[web.AppRunner] = None
+        self._sio_thread: Optional[threading.Thread] = None
+        self._sio_loop: Optional[asyncio.AbstractEventLoop] = None
+        
+        if self._cfg.socketio_enabled:
+            self._start_socketio_server()
 
     def _install_signal_handlers(self) -> None:
         def _handle(sig_num: int, _frame: Any) -> None:
@@ -497,6 +518,172 @@ class DeepfakeConsumer:
 
         signal.signal(signal.SIGINT, _handle)
         signal.signal(signal.SIGTERM, _handle)
+
+    def _start_socketio_server(self) -> None:
+        """Start Socket.IO server in background thread (Option B: backend as server)."""
+        try:
+            logger.info(
+                "socketio_server_starting host=%s port=%s use_rooms=%s",
+                self._cfg.socketio_host,
+                self._cfg.socketio_port,
+                self._cfg.socketio_use_rooms,
+            )
+            
+            self._sio_thread = threading.Thread(target=self._run_socketio_server, daemon=True)
+            self._sio_thread.start()
+            
+            # Give server time to start
+            time.sleep(1)
+            logger.info("socketio_server_started host=%s port=%s", self._cfg.socketio_host, self._cfg.socketio_port)
+        except Exception as e:
+            logger.error("socketio_server_start_failed err=%s", e, exc_info=True)
+            self._sio_server = None
+    
+    def _run_socketio_server(self) -> None:
+        """Run Socket.IO server in dedicated event loop (background thread)."""
+        self._sio_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._sio_loop)
+        
+        try:
+            self._sio_loop.run_until_complete(self._setup_socketio_server())
+            self._sio_loop.run_forever()
+        except Exception as e:
+            logger.error("socketio_server_loop_failed err=%s", e, exc_info=True)
+        finally:
+            self._sio_loop.close()
+    
+    async def _setup_socketio_server(self) -> None:
+        """Setup Socket.IO server with aiohttp."""
+        # Create Socket.IO server
+        self._sio_server = socketio.AsyncServer(
+            async_mode="aiohttp",
+            cors_allowed_origins="*",
+            logger=False,
+            engineio_logger=False,
+        )
+        
+        # Setup event handlers
+        @self._sio_server.event
+        async def connect(sid, environ):
+            query = environ.get("QUERY_STRING", "")
+            session_id = None
+            if "session_id=" in query:
+                session_id = query.split("session_id=")[1].split("&")[0]
+            
+            logger.info("socketio_client_connected sid=%s session_id=%s", sid, session_id)
+            
+            # Store session_id in session data
+            if session_id:
+                await self._sio_server.save_session(sid, {"session_id": session_id})
+        
+        @self._sio_server.event
+        async def disconnect(sid):
+            session = await self._sio_server.get_session(sid)
+            session_id = session.get("session_id") if session else None
+            logger.info("socketio_client_disconnected sid=%s session_id=%s", sid, session_id)
+        
+        @self._sio_server.event
+        async def join_session(sid, data):
+            """Client requests to join a session room for filtering."""
+            session_id = data.get("session_id")
+            if session_id and self._cfg.socketio_use_rooms:
+                await self._sio_server.enter_room(sid, session_id)
+                logger.info("socketio_client_joined_room sid=%s session_id=%s", sid, session_id)
+                await self._sio_server.save_session(sid, {"session_id": session_id})
+        
+        @self._sio_server.event
+        async def leave_session(sid, data):
+            """Client requests to leave a session room."""
+            session_id = data.get("session_id")
+            if session_id and self._cfg.socketio_use_rooms:
+                await self._sio_server.leave_room(sid, session_id)
+                logger.info("socketio_client_left_room sid=%s session_id=%s", sid, session_id)
+        
+        # Create aiohttp app
+        self._sio_app = web.Application()
+        self._sio_server.attach(self._sio_app)
+        
+        # Start server
+        self._sio_runner = web.AppRunner(self._sio_app)
+        await self._sio_runner.setup()
+        site = web.TCPSite(self._sio_runner, self._cfg.socketio_host, self._cfg.socketio_port)
+        await site.start()
+        
+        logger.info(
+            "socketio_server_ready host=%s port=%s",
+            self._cfg.socketio_host,
+            self._cfg.socketio_port,
+        )
+
+    def emit_prediction_to_mobile(
+        self, session_id: str, batch_id: str, window_start: int, pred: Dict[str, Any]
+    ) -> bool:
+        """Emit prediction result to mobile clients via Socket.IO server (Option B)."""
+        if not self._cfg.socketio_enabled or self._sio_server is None or self._sio_loop is None:
+            return True
+
+        payload = {
+            "session_id": session_id,
+            "batch_id": batch_id,
+            "window_start": window_start,
+            "label": pred["pred_label"],
+            "prob_real": pred["prob_real"],
+            "prob_fake": pred["prob_fake"],
+            "confidence": pred["confidence"],
+            "inference_ms": pred["inference_ms"],
+            "timestamp": time.time(),
+        }
+
+        # Log the payload that will be emitted
+        try:
+            logger.debug("mobile_emit_payload session_id=%s batch_id=%s payload=%s", session_id, batch_id, json.dumps(payload))
+        except Exception:
+            logger.debug("mobile_emit_payload session_id=%s batch_id=%s payload_unserializable", session_id, batch_id)
+
+        # Schedule emit in Socket.IO event loop
+        future = asyncio.run_coroutine_threadsafe(
+            self._emit_to_clients(session_id, payload),
+            self._sio_loop
+        )
+        
+        try:
+            future.result(timeout=1.0)  # Wait up to 1s for emit
+            logger.info(
+                "socketio_emit_success event=%s session_id=%s batch_id=%s label=%s conf=%.4f",
+                self._cfg.socketio_event,
+                session_id,
+                batch_id,
+                pred["pred_label"],
+                pred["confidence"],
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                "socketio_emit_error event=%s session_id=%s batch_id=%s err=%s",
+                self._cfg.socketio_event,
+                session_id,
+                batch_id,
+                e,
+            )
+            return False
+    
+    async def _emit_to_clients(self, session_id: str, payload: Dict[str, Any]) -> None:
+        """Async emit to Socket.IO clients (runs in server event loop)."""
+        if self._cfg.socketio_use_rooms:
+            # Emit only to clients in the session room
+            await self._sio_server.emit(
+                self._cfg.socketio_event,
+                payload,
+                room=session_id,
+            )
+            logger.debug("socketio_emit_to_room room=%s", session_id)
+        else:
+            # Broadcast to all connected clients
+            await self._sio_server.emit(
+                self._cfg.socketio_event,
+                payload,
+            )
+            logger.debug("socketio_emit_broadcast")
 
     def request_stop(self, reason: str) -> None:
         if self._stopping:
@@ -590,6 +777,9 @@ class DeepfakeConsumer:
                 pred["inference_ms"],
             )
 
+            # Emit prediction to mobile client
+            self.emit_prediction_to_mobile(session_id, batch_id, window_start, pred)
+
             ch.basic_ack(delivery_tag=delivery_tag)
             logger.info("ACK delivery_tag=%s session_id=%s batch_id=%s", delivery_tag, session_id, batch_id)
 
@@ -654,6 +844,17 @@ class DeepfakeConsumer:
                         self._connection.close()
                     except Exception:
                         pass
+
+            # Stop Socket.IO server
+            if self._sio_server is not None and self._sio_loop is not None:
+                try:
+                    # Stop server event loop
+                    self._sio_loop.call_soon_threadsafe(self._sio_loop.stop)
+                    if self._sio_thread is not None:
+                        self._sio_thread.join(timeout=5)
+                    logger.info("socketio_server_stopped")
+                except Exception as e:
+                    logger.warning("socketio_server_stop_failed err=%s", e)
 
             logger.info(
                 "consumer_stopped processed=%d predictions=%d errors=%d",

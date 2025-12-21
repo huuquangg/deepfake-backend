@@ -17,6 +17,34 @@ APP_DIR="$PROJECT_ROOT/src/app"
 # Array to track background processes
 declare -a PIDS=()
 declare -a SERVICE_NAMES=()
+PORTS_OPENED=false
+
+# Function to open firewall ports
+open_ports() {
+    echo -e "${BLUE}Opening firewall ports...${NC}"
+    sudo ufw allow 8090/tcp >/dev/null 2>&1  # core-banking
+    sudo ufw allow 8091/tcp >/dev/null 2>&1  # video-streaming
+    sudo ufw allow 8001/tcp >/dev/null 2>&1  # openface-extraction
+    sudo ufw allow 8092/tcp >/dev/null 2>&1  # frequency-extraction
+    sudo ufw allow 5672/tcp >/dev/null 2>&1  # rabbitmq
+    sudo ufw allow 8093/tcp >/dev/null 2>&1  # socketio-server (deepfake-detection)
+    PORTS_OPENED=true
+    echo -e "${GREEN}✓ Firewall ports opened (8090, 8091, 8001, 8092, 5672, 8093)${NC}\n"
+}
+
+# Function to close firewall ports
+close_ports() {
+    if [ "$PORTS_OPENED" = true ]; then
+        echo -e "${BLUE}Closing firewall ports...${NC}"
+        sudo ufw delete allow 8090/tcp >/dev/null 2>&1
+        sudo ufw delete allow 8091/tcp >/dev/null 2>&1
+        sudo ufw delete allow 8001/tcp >/dev/null 2>&1
+        sudo ufw delete allow 8092/tcp >/dev/null 2>&1
+        sudo ufw delete allow 5672/tcp >/dev/null 2>&1
+        sudo ufw delete allow 8093/tcp >/dev/null 2>&1
+        echo -e "${GREEN}✓ Firewall ports closed${NC}"
+    fi
+}
 
 # Cleanup function
 cleanup() {
@@ -35,12 +63,18 @@ cleanup() {
     }
     cd "$APP_DIR/video-streaming" 2>/dev/null && docker compose down 2>/dev/null
     
+    # Close firewall ports
+    close_ports
+    
     echo -e "${GREEN}All services stopped${NC}"
     exit 0
 }
 
 # Set up trap for cleanup
 trap cleanup SIGINT SIGTERM EXIT
+
+# Open firewall ports before starting services
+open_ports
 
 # Function to check if service uses Docker
 uses_docker() {

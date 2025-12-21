@@ -20,61 +20,92 @@ OUTPUT_PATH = "/home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/de
 
 def extract_csv_features_from_sample():
     """
-    Extract CSV features (columns 283:957) from sample fusion CSV
-    and fit a StandardScaler to match training
+    Extract CSV features matching consumer's build_inputs:
+    - 283 frequency features (SRM, DCT, FFT + 3 metadata: color_mode, do_hann, resize_to)
+    - 669 OpenFace features (excluding: frame, face_id, timestamp, confidence, success)
+    - Total: 952 features
     """
     print(f"Loading sample CSV from: {FUSION_CSV}")
     df = pd.read_csv(FUSION_CSV)
     
     print(f"CSV shape: {df.shape}")
-    print(f"Columns: {df.columns.tolist()[:10]}... (showing first 10)")
+    print(f"Columns: {list(df.columns[:20])}... (showing first 20)")
     
-    # Extract frequency + openface features (columns after metadata)
-    # Based on your CSV structure:
-    # - SRM features: SRM_mean_1 to SRM_energy_20 (120 features)
-    # - DCT features: DCT_mean_low to DCT_hist_high_bin_7 (57 features)
-    # - FFT features: fft_psd_total to fft_jpeg_8x8_diag (103 features)
-    # - Metadata: width, height, color_mode, resize_to, do_hann (5 features)
-    # - OpenFace features: feature_1 to feature_674 (674 features)
+    # Frequency features: 283 total
+    # SRM: 20 kernels × 6 stats = 120
+    srm_cols = []
+    for i in range(1, 21):
+        srm_cols.extend([f"SRM_mean_{i}", f"SRM_var_{i}", f"SRM_skew_{i}", 
+                        f"SRM_kurt_{i}", f"SRM_entropy_{i}", f"SRM_energy_{i}"])
     
-    # Total: 120 + 57 + 103 + 3 = 283 frequency features (excluding some metadata)
-    #        674 openface features
-    #        = 957 total
+    # DCT: 57 features
+    dct_cols = []
+    for band in ["low", "mid", "high"]:
+        dct_cols.extend([f"DCT_mean_{band}", f"DCT_var_{band}", 
+                        f"DCT_skew_{band}", f"DCT_kurt_{band}"])
+    for band in ["low", "mid", "high"]:
+        dct_cols.append(f"DCT_entropy_{band}")
+    dct_cols.append("DCT_energy_total")
+    for i in range(20):
+        dct_cols.append(f"DCT_zigzag_{i}")
+    for band in ["low", "mid", "high"]:
+        for bin_idx in range(8):
+            dct_cols.append(f"DCT_hist_{band}_bin_{bin_idx}")
     
-    # Find feature column ranges
-    freq_start_col = "SRM_mean_1"
-    freq_end_col = "fft_jpeg_8x8_diag"
-    of_start_col = "feature_1"
-    of_end_col = "feature_674"
+    # FFT: 103 features
+    fft_cols = [
+        "fft_psd_total", "fft_E_low", "fft_E_mid", "fft_E_high",
+        "fft_E_high_over_low", "fft_E_mid_over_low",
+        "fft_radial_centroid", "fft_radial_bandwidth",
+        "fft_rolloff_85", "fft_rolloff_95",
+        "fft_spectral_flatness", "fft_spectral_entropy", "fft_hf_slope_beta"
+    ]
+    for i in range(12):
+        fft_cols.append(f"fft_aps_{i}")
+    for i in range(64):
+        fft_cols.append(f"fft_rps_{i}")
+    for i in range(1, 4):
+        fft_cols.extend([f"fft_peak{i}_r", f"fft_peak{i}_val"])
+    fft_cols.extend(["fft_jpeg_8x8_x", "fft_jpeg_8x8_y", "fft_jpeg_8x8_diag"])
     
-    freq_start_idx = df.columns.get_loc(freq_start_col)
-    freq_end_idx = df.columns.get_loc(freq_end_col) + 1
-    of_start_idx = df.columns.get_loc(of_start_col)
-    of_end_idx = df.columns.get_loc(of_end_col) + 1
+    # Metadata: 5 features (width, height, color_mode, resize_to, do_hann)
+    meta_cols = ["width", "height", "color_mode", "resize_to", "do_hann"]
     
-    print(f"Frequency features: columns {freq_start_idx}:{freq_end_idx} ({freq_end_idx - freq_start_idx} features)")
-    print(f"OpenFace features: columns {of_start_idx}:{of_end_idx} ({of_end_idx - of_start_idx} features)")
+    freq_cols = srm_cols + dct_cols + fft_cols + meta_cols
     
-    # Extract features
-    freq_features = df.iloc[:, freq_start_idx:freq_end_idx].values
-    of_features = df.iloc[:, of_start_idx:of_end_idx].values
+    print(f"Frequency features: {len(freq_cols)} (should be 283)")
     
-    # Concatenate
-    all_csv_features = np.concatenate([freq_features, of_features], axis=1)
+    # OpenFace features: 669 (excluding frame, face_id, timestamp, confidence, success)
+    # Using feature_6 to feature_674 (skip first 5)
+    of_cols = [f"feature_{i}" for i in range(6, 675)]
     
-    print(f"Combined CSV features shape: {all_csv_features.shape}")
+    print(f"OpenFace features: {len(of_cols)} (should be 669)")
     
-    if all_csv_features.shape[1] != 957:
-        print(f"WARNING: Expected 957 features but got {all_csv_features.shape[1]}")
-        print("Adjusting to 957...")
-        if all_csv_features.shape[1] > 957:
-            all_csv_features = all_csv_features[:, :957]
-        else:
-            # Pad with zeros if needed
-            padding = np.zeros((all_csv_features.shape[0], 957 - all_csv_features.shape[1]))
-            all_csv_features = np.concatenate([all_csv_features, padding], axis=1)
+    all_feature_cols = freq_cols + of_cols
+    print(f"Total features: {len(all_feature_cols)} (should be 952)")
     
-    return all_csv_features
+    # Check which columns are missing
+    missing_cols = [c for c in all_feature_cols if c not in df.columns]
+    if missing_cols:
+        print(f"WARNING: {len(missing_cols)} columns missing from CSV")
+        print(f"First 10 missing: {missing_cols[:10]}")
+        # Fill missing with zeros
+        for col in missing_cols:
+            df[col] = 0.0
+    
+    # Convert color_mode to numeric (0 for gray, 1 for rgb, etc.)
+    if 'color_mode' in df.columns:
+        df['color_mode'] = df['color_mode'].map({'gray': 0, 'rgb': 1, 'bgr': 1}).fillna(0).astype(float)
+    
+    # Extract features in order
+    csv_features = df[all_feature_cols].values.astype(np.float32)
+    
+    print(f"Extracted CSV features shape: {csv_features.shape}")
+    print(f"Feature range: min={csv_features.min():.2f}, max={csv_features.max():.2f}, mean={csv_features.mean():.2f}")
+    
+    assert csv_features.shape[1] == 952, f"Expected 952 features, got {csv_features.shape[1]}"
+    
+    return csv_features
 
 def fit_and_save_scaler():
     """Fit StandardScaler on sample data and save"""
