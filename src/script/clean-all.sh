@@ -161,6 +161,7 @@ echo -e "${YELLOW}Step 1: Stopping running services...${NC}\n"
 stop_service_by_port 8090 "core-banking"
 stop_service_by_port 8091 "video-streaming"
 stop_service_by_port 8092 "frequency-extraction"
+stop_service_by_port 8096 "api-gateway"
 
 echo ""
 

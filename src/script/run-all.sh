@@ -22,26 +22,16 @@ PORTS_OPENED=false
 # Function to open firewall ports
 open_ports() {
     echo -e "${BLUE}Opening firewall ports...${NC}"
-    sudo ufw allow 8090/tcp >/dev/null 2>&1  # core-banking
-    sudo ufw allow 8091/tcp >/dev/null 2>&1  # video-streaming
-    sudo ufw allow 8001/tcp >/dev/null 2>&1  # openface-extraction
-    sudo ufw allow 8092/tcp >/dev/null 2>&1  # frequency-extraction
-    sudo ufw allow 5672/tcp >/dev/null 2>&1  # rabbitmq
-    sudo ufw allow 8093/tcp >/dev/null 2>&1  # socketio-server (deepfake-detection)
+    sudo ufw allow 8096/tcp >/dev/null 2>&1  # api-gateway
     PORTS_OPENED=true
-    echo -e "${GREEN}✓ Firewall ports opened (8090, 8091, 8001, 8092, 5672, 8093)${NC}\n"
+    echo -e "${GREEN}✓ Firewall port opened (8096)${NC}\n"
 }
 
 # Function to close firewall ports
 close_ports() {
     if [ "$PORTS_OPENED" = true ]; then
         echo -e "${BLUE}Closing firewall ports...${NC}"
-        sudo ufw delete allow 8090/tcp >/dev/null 2>&1
-        sudo ufw delete allow 8091/tcp >/dev/null 2>&1
-        sudo ufw delete allow 8001/tcp >/dev/null 2>&1
-        sudo ufw delete allow 8092/tcp >/dev/null 2>&1
-        sudo ufw delete allow 5672/tcp >/dev/null 2>&1
-        sudo ufw delete allow 8093/tcp >/dev/null 2>&1
+        sudo ufw delete allow 8096/tcp >/dev/null 2>&1
         echo -e "${GREEN}✓ Firewall ports closed${NC}"
     fi
 }
@@ -90,7 +80,7 @@ uses_docker() {
 # Function to check if service is a Go service
 is_go_service() {
     local service_dir=$1
-    if [ -f "$service_dir/go.mod" ] && [ -f "$service_dir/bin/"* ] 2>/dev/null; then
+    if [ -f "$service_dir/go.mod" ]; then
         return 0
     fi
     return 1
@@ -181,8 +171,30 @@ run_go_service() {
     
     # Find the binary
     local binary_path=$(find bin -type f -executable 2>/dev/null | head -n 1)
+
+    # Build if missing
+    if [ -z "$binary_path" ]; then
+        echo -e "  ${BLUE}Binary not found, building...${NC}"
+        mkdir -p bin
+        if [ -d "cmd/server" ]; then
+            go build -o "bin/$service_name" ./cmd/server 2>&1 || {
+                echo -e "${RED}✗ Build failed for $service_name${NC}\n"
+                return 0
+            }
+        elif [ -f "main.go" ]; then
+            go build -o "bin/$service_name" . 2>&1 || {
+                echo -e "${RED}✗ Build failed for $service_name${NC}\n"
+                return 0
+            }
+        else
+            echo -e "${RED}✗ No build target found for $service_name${NC}\n"
+            return 0
+        fi
+        binary_path="bin/$service_name"
+    fi
     
     if [ -n "$binary_path" ]; then
+        mkdir -p logs
         # Run in background and capture PID
         ./"$binary_path" > "logs/$service_name.log" 2>&1 &
         local pid=$!

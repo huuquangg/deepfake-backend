@@ -158,6 +158,16 @@ build_go_service() {
             echo -e "${RED}✗ Failed to build $service_name binary${NC}\n"
             return 0  # Continue with other services
         fi
+    # Check for main.go at service root (e.g., api-gateway)
+    elif [ -f "main.go" ]; then
+        mkdir -p bin
+        if go build -o "bin/$service_name" . 2>&1; then
+            echo -e "${GREEN}✓ $service_name binary built successfully${NC}\n"
+            ((GO_BUILT++))
+        else
+            echo -e "${RED}✗ Failed to build $service_name binary${NC}\n"
+            return 0
+        fi
     else
         echo -e "${RED}✗ cmd/server directory not found for $service_name${NC}\n"
         return 0

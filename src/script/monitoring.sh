@@ -18,6 +18,7 @@ declare -A SERVICE_PORTS=(
     ["core-banking"]=8090
     ["video-streaming"]=8091
     ["frequency-extraction"]=8092
+    ["api-gateway"]=8096
 )
 
 declare -A DOCKER_SERVICES=(
