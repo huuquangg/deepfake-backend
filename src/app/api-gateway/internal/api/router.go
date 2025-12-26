@@ -15,12 +15,23 @@ type Route struct {
 
 func Routes(cfg *config.Config) []Route {
 	return []Route{
+		// Video Streaming Service
 		{Prefix: "/api/video-streaming/", Target: cfg.VideoStreamingURL.String(), StripPrefix: ""},
 		{Prefix: "/frames/", Target: cfg.VideoStreamingURL.String(), StripPrefix: ""},
+		
+		// Core Banking Service
 		{Prefix: "/api/core-banking/", Target: cfg.CoreBankingURL.String(), StripPrefix: ""},
+		
+		// OpenFace Feature Extraction (API endpoints)
 		{Prefix: "/api/openface/", Target: cfg.OpenFaceURL.String(), StripPrefix: "/api/openface"},
+		
+		// OpenFace Batch API
 		{Prefix: "/api/openface-batch/", Target: cfg.OpenFaceBatchURL.String(), StripPrefix: "/api/openface-batch"},
+		
+		// Frequency Feature Extraction
 		{Prefix: "/api/frequency/", Target: cfg.FrequencyURL.String(), StripPrefix: "/api/frequency"},
+		
+		// Socket.IO for real-time predictions
 		{Prefix: "/socket.io/", Target: cfg.VideoStreamingSocket.String(), StripPrefix: ""},
 	}
 }

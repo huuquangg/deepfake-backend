@@ -13,10 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pion/webrtc/v3"
 	"video-streaming/internal/aggregator"
 	"video-streaming/internal/config"
 	"video-streaming/internal/dto"
 	"video-streaming/internal/service"
+	webrtcHandler "video-streaming/internal/webrtc"
 )
 
 type Handler struct {
@@ -24,6 +26,7 @@ type Handler struct {
 	frameCounters  sync.Map // map[sessionID]int64 - atomic counter per session
 	aggregator     *aggregator.Aggregator
 	config         *config.Config
+	webrtcHandler  *webrtcHandler.StreamHandler // WebRTC stream handler
 }
 
 // Constructor for Handler
@@ -32,6 +35,7 @@ func NewHandler(sessionService *service.SessionService, agg *aggregator.Aggregat
 		sessionService: sessionService,
 		aggregator:     agg,
 		config:         cfg,
+		webrtcHandler:  webrtcHandler.NewStreamHandler(agg),
 	}
 }
 
@@ -459,4 +463,170 @@ func (handler *Handler) ServeFrame(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=3600")  // Cache for 1 hour
 	http.ServeFile(w, r, framePath)
+}
+
+// WebRTC Streaming Endpoints
+
+// StartWebRTCStream godoc
+// @Summary      Start WebRTC video stream
+// @Description  Establish WebRTC connection for real-time video streaming with lower latency than HTTP
+// @Tags         WebRTC
+// @Accept       json
+// @Produce      json
+// @Param        offer  body      object  true  "WebRTC offer with session_id and SDP"
+// @Success      200    {object}  object  "WebRTC answer with SDP"
+// @Failure      400    {object}  dto.ErrorResponse
+// @Failure      500    {object}  dto.ErrorResponse
+// @Router       /api/video-streaming/webrtc/stream/offer [post]
+func (handler *Handler) StartWebRTCStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse request body
+	var offer struct {
+		SessionID string `json:"session_id"`
+		SDP       string `json:"sdp"`
+		Type      string `json:"type"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&offer); err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to parse offer: %v", err))
+		return
+	}
+
+	if offer.SessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+
+	if offer.SDP == "" {
+		handler.respondError(w, http.StatusBadRequest, "sdp is required")
+		return
+	}
+
+	log.Printf("Received WebRTC offer from session: %s", offer.SessionID)
+
+	// Handle the offer and create answer
+	answerSDP, err := handler.webrtcHandler.HandleOffer(offer.SessionID, offer.SDP)
+	if err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to handle offer: %v", err))
+		return
+	}
+
+	// Return answer
+	answer := map[string]interface{}{
+		"session_id": offer.SessionID,
+		"sdp":        answerSDP,
+		"type":       "answer",
+	}
+
+	log.Printf("Sending WebRTC answer to session: %s", offer.SessionID)
+	handler.respondJSON(w, http.StatusOK, answer)
+}
+
+// HandleICECandidate godoc
+// @Summary      Add ICE candidate for WebRTC connection
+// @Description  Receive and add ICE candidates during WebRTC negotiation
+// @Tags         WebRTC
+// @Accept       json
+// @Produce      json
+// @Param        candidate  body      object  true  "ICE candidate with session_id"
+// @Success      200        {object}  object  "Success message"
+// @Failure      400        {object}  dto.ErrorResponse
+// @Failure      500        {object}  dto.ErrorResponse
+// @Router       /api/video-streaming/webrtc/stream/candidate [post]
+func (handler *Handler) HandleICECandidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		SessionID string                  `json:"session_id"`
+		Candidate webrtc.ICECandidateInit `json:"candidate"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handler.respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to parse candidate: %v", err))
+		return
+	}
+
+	if req.SessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+
+	// Add ICE candidate
+	if err := handler.webrtcHandler.HandleICECandidate(req.SessionID, req.Candidate); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add ICE candidate: %v", err))
+		return
+	}
+
+	handler.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "ICE candidate added successfully",
+		"session_id": req.SessionID,
+	})
+}
+
+// CloseWebRTCStream godoc
+// @Summary      Close WebRTC stream
+// @Description  Close the WebRTC connection for a session
+// @Tags         WebRTC
+// @Produce      json
+// @Param        session_id  path      string  true  "Session ID"
+// @Success      200         {object}  object  "Success message"
+// @Failure      400         {object}  dto.ErrorResponse
+// @Failure      500         {object}  dto.ErrorResponse
+// @Router       /api/video-streaming/webrtc/stream/{session_id}/close [post]
+func (handler *Handler) CloseWebRTCStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handler.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Extract session ID from URL path
+	sessionID := handler.extractSessionIDFromWebRTCPath(r.URL.Path)
+	if sessionID == "" {
+		handler.respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+
+	// Close WebRTC session
+	if err := handler.webrtcHandler.CloseSession(sessionID); err != nil {
+		handler.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to close session: %v", err))
+		return
+	}
+
+	log.Printf("WebRTC session closed: %s", sessionID)
+	handler.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "WebRTC session closed successfully",
+		"session_id": sessionID,
+	})
+}
+
+// GetWebRTCStats godoc
+// @Summary      Get WebRTC statistics
+// @Description  Returns statistics for all active WebRTC sessions
+// @Tags         WebRTC
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /api/video-streaming/webrtc/stats [get]
+func (handler *Handler) GetWebRTCStats(w http.ResponseWriter, r *http.Request) {
+	stats := handler.webrtcHandler.GetSessionStats()
+	handler.respondJSON(w, http.StatusOK, stats)
+}
+
+// extractSessionIDFromWebRTCPath extracts session ID from WebRTC path
+func (handler *Handler) extractSessionIDFromWebRTCPath(path string) string {
+	// Expected pattern: /api/video-streaming/webrtc/stream/{session_id}/close
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for i, part := range parts {
+		if part == "stream" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
 }

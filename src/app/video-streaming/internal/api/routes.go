@@ -15,6 +15,18 @@ func SetupRoutes(sessionHandler *Handler) http.Handler {
 	mux.HandleFunc("/api/video-streaming/ingest/frame", sessionHandler.IngestFrame)
 	mux.HandleFunc("/api/video-streaming/stats/aggregator", sessionHandler.GetAggregatorStats)
 
+	// WebRTC streaming endpoints (NEW: low-latency alternative to IngestFrame)
+	mux.HandleFunc("/api/video-streaming/webrtc/stream/offer", sessionHandler.StartWebRTCStream)
+	mux.HandleFunc("/api/video-streaming/webrtc/stream/candidate", sessionHandler.HandleICECandidate)
+	mux.HandleFunc("/api/video-streaming/webrtc/stream/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/close") {
+			sessionHandler.CloseWebRTCStream(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+	mux.HandleFunc("/api/video-streaming/webrtc/stats", sessionHandler.GetWebRTCStats)
+
 	// Serve stored frames (Option 2: static file serving)
 	mux.HandleFunc("/frames/", sessionHandler.ServeFrame)
 
@@ -33,6 +45,7 @@ func SetupRoutes(sessionHandler *Handler) http.Handler {
 	// Apply middleware
 	handler := LoggingMiddleware(mux)
 	handler = RecoveryMiddleware(handler)
+	handler = CORSMiddleware(handler)
 
 	return handler
 }
