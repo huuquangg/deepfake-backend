@@ -37,13 +37,7 @@ func ConnectPostgres(cfg *config.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
-	// Set search_path to use the schema
-	setSearchPathSQL := fmt.Sprintf("SET search_path TO %s, public", cfg.PostgresSchema)
-	if _, err := db.Exec(setSearchPathSQL); err != nil {
-		return nil, fmt.Errorf("failed to set search_path: %w", err)
-	}
-
-	// Run migrations
+	// Run migrations (must be done before setting search_path permanently)
 	if err := runMigrations(db, cfg.PostgresSchema); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
@@ -52,12 +46,43 @@ func ConnectPostgres(cfg *config.Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 
+	// Set search_path permanently for all connections from the pool
+	// This ensures all queries use the correct schema
+	setSearchPathSQL := fmt.Sprintf("ALTER DATABASE %s SET search_path TO %s, public", cfg.PostgresDB, cfg.PostgresSchema)
+	if _, err := db.Exec(setSearchPathSQL); err != nil {
+		// If ALTER DATABASE fails (permission issue), try setting for current session
+		log.Printf("Warning: Could not set permanent search_path: %v. Using session-level search_path.", err)
+		sessionSearchPathSQL := fmt.Sprintf("SET search_path TO %s, public", cfg.PostgresSchema)
+		if _, err := db.Exec(sessionSearchPathSQL); err != nil {
+			return nil, fmt.Errorf("failed to set search_path: %w", err)
+		}
+	} else {
+		// Reconnect to apply the new search_path setting
+		db.Close()
+		db, err = sql.Open("postgres", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reopen database: %w", err)
+		}
+		if err := db.Ping(); err != nil {
+			return nil, fmt.Errorf("failed to ping database after reconnect: %w", err)
+		}
+		// Reset pool settings after reconnect
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+	}
+
 	log.Printf("PostgreSQL connection established (database: %s, schema: %s)", cfg.PostgresDB, cfg.PostgresSchema)
 	return db, nil
 }
 
 func runMigrations(db *sql.DB, schema string) error {
 	log.Println("Running migrations...")
+
+	// Set search_path for this migration session
+	setSearchPathSQL := fmt.Sprintf("SET search_path TO %s, public", schema)
+	if _, err := db.Exec(setSearchPathSQL); err != nil {
+		return fmt.Errorf("failed to set search_path for migrations: %w", err)
+	}
 
 	migrations := []string{
 		// Create users table
