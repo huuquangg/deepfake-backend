@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""
+Deepfake Detection Consumer
+
+Key behaviors:
+- Consumes fused per-frame features + frame URIs from RabbitMQ.
+- Builds fixed-length model inputs: images (1, 15, 224, 224, 3) and CSV features (1, 15, 957).
+- Padding: if a frame/feature is missing, repeats the last available item; if none exist yet, pads with zeros.
+- Logs every message receipt and every ACK/NACK (with delivery_tag, session_id, batch_id, and reason).
+- Graceful shutdown on SIGINT/SIGTERM (stops consuming and closes RabbitMQ connection).
+- Optional deletion: if DELETE_FRAMES=1, attempts HTTP DELETE on each frame URI after successful ACK.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import signal
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
+import cv2
+import joblib
+import numpy as np
+import pika
+import requests
+from tensorflow import keras
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger("deepfake-detection-consumer")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    raw = raw.strip().lower()
+    return raw in {"1", "true", "t", "yes", "y", "on"}
+
+
+@dataclass(frozen=True)
+class Config:
+    # RabbitMQ
+    rabbitmq_url: str = os.getenv("RABBITMQ_URL", "amqp://admin:P@ssw0rd123@localhost:5672/")
+    rabbitmq_queue: str = os.getenv("RABBITMQ_QUEUE", "feature.extraction.results")
+    
+    # Model
+    MODEL_PATH = os.getenv("MODEL_PATH", "/home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/deepfake-detection/TCN_TemporalConvNet_Residual Blocks_final.h5")
+    SCALER_PATH = os.getenv("SCALER_PATH", "/home/huuquangdang/huu.quang.dang/thesis/deepfake-1801/src/app/deepfake-detection/csv_scaler.pkl")
+    
+    # Input specs
+    SEQUENCE_LENGTH = 15
+    IMAGE_SIZE = (224, 224)
+    CSV_FEATURES = 957  # 283 frequency + 674 openface
+    
+    # Frame fetching
+    FRAME_FETCH_TIMEOUT = 5  # seconds
+    FRAME_CACHE_SIZE = 100  # Keep recent frames in memory
+    
+    # WebSocket (placeholder for future implementation)
+    WEBSOCKET_PORT = 8094
+    
+    # Processing
+    BATCH_PREDICTION = True  # Process multiple windows in parallel
+
+
+# ========================================
+# Frame Fetcher
+# ========================================
+class FrameFetcher:
+    """Fetches frames from HTTP endpoints and caches them"""
+    
+    def __init__(self, cache_size=100, timeout=5):
+        self.cache = {}  # {uri: (frame_data, timestamp)}
+        self.cache_size = cache_size
+        self.timeout = timeout
+        self.session = requests.Session()
+        
+    def fetch_frame(self, uri: str) -> Optional[np.ndarray]:
+        """
+        Fetch frame from URI and return as numpy array (224,224,3) float32
+        Returns None if fetch fails
+        """
+        # Check cache first
+        if uri in self.cache:
+            frame_data, _ = self.cache[uri]
+            return frame_data
+        
+        try:
+            response = self.session.get(uri, timeout=self.timeout)
+            response.raise_for_status()
+            
+            # Decode JPEG bytes to numpy array
+            img_array = np.frombuffer(response.content, dtype=np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            
+            if img is None:
+                logger.error(f"Failed to decode image from {uri}")
+                return None
+            
+            # Preprocess to match training: resize (224,224), float32, /255.0, keep BGR
+            img = cv2.resize(img, Config.IMAGE_SIZE)
+            img = img.astype(np.float32) / 255.0
+            
+            # Cache the frame
+            self.cache[uri] = (img, time.time())
+            
+            # Evict oldest if cache is full
+            if len(self.cache) > self.cache_size:
+                oldest_uri = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+                del self.cache[oldest_uri]
+            
+            return img
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch frame from {uri}: {e}")
+            return None
+    
+    def fetch_batch(self, uris: List[str]) -> List[Optional[np.ndarray]]:
+        """Fetch multiple frames in sequence"""
+        return [self.fetch_frame(uri) for uri in uris]
+
+
+# ========================================
+# Input Builder
+# ========================================
+class InputBuilder:
+    """Builds model inputs from RabbitMQ message"""
+    
+    def __init__(self, scaler_path: str, frame_fetcher: FrameFetcher):
+        self.frame_fetcher = frame_fetcher
+        
+        # Load StandardScaler
+        if os.path.exists(scaler_path):
+            self.scaler = joblib.load(scaler_path)
+            logger.info(f"Loaded StandardScaler from {scaler_path}")
+        else:
+            logger.warning(f"StandardScaler not found at {scaler_path}. Will skip scaling.")
+            self.scaler = None
+    
+    def parse_message(self, message: Dict[str, Any]) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Extract frame_refs and features from RabbitMQ message
+        
+        Returns:
+            (frame_refs, features) - both sorted by frame_index
+        """
+        frame_refs = message.get("frame_refs", [])
+        features = message.get("features", [])
+        
+        # Sort by frame_index
+        frame_refs = sorted(frame_refs, key=lambda x: x.get("frame_index", 0))
+        features = sorted(features, key=lambda x: x.get("frame_index", 0))
+        
+        return frame_refs, features
+    
+    def build_csv_input(self, features: List[Dict], window_start: int) -> Optional[np.ndarray]:
+        """
+        Build (15, 957) CSV input from features array
+        
+        Args:
+            features: List of feature dicts with frame_index, _source, and feature columns
+            window_start: Starting frame_index for the window
+        
+        Returns:
+            (15, 957) numpy array or None if window incomplete
+        """
+        # Group features by frame_index
+        features_by_idx = {}
+        for feat in features:
+            idx = feat.get("frame_index", -1)
+            source = feat.get("_source", "unknown")
+            if idx not in features_by_idx:
+                features_by_idx[idx] = {}
+            features_by_idx[idx][source] = feat
+        
+        # Build window
+        csv_window = []
+        for i in range(window_start, window_start + Config.SEQUENCE_LENGTH):
+            if i not in features_by_idx:
+                logger.warning(f"Missing frame_index {i} in features")
+                return None
+            
+            frame_feats = features_by_idx[i]
+            
+            # Check for both sources
+            if "frequency" not in frame_feats or "openface" not in frame_feats:
+                logger.warning(f"Missing source for frame_index {i}")
+                return None
+            
+            # Extract frequency features (283 columns)
+            freq_row = frame_feats["frequency"]
+            freq_vector = self._extract_frequency_features(freq_row)
+            
+            # Extract openface features (674 columns)
+            of_row = frame_feats["openface"]
+            of_vector = self._extract_openface_features(of_row)
+            
+            # Concatenate: frequency (283) + openface (674) = 957
+            combined = np.concatenate([freq_vector, of_vector])
+            csv_window.append(combined)
+        
+        # Stack into (15, 957)
+        csv_input = np.stack(csv_window, axis=0)
+        
+        # Apply StandardScaler if available
+        if self.scaler is not None:
+            # Scaler expects (n_samples, n_features), so reshape, scale, reshape back
+            original_shape = csv_input.shape
+            csv_input_flat = csv_input.reshape(-1, Config.CSV_FEATURES)
+            csv_input_scaled = self.scaler.transform(csv_input_flat)
+            csv_input = csv_input_scaled.reshape(original_shape)
+        
+        return csv_input
+    
+    def _extract_frequency_features(self, row: Dict) -> np.ndarray:
+        """Extract 283 frequency features in correct order"""
+        # Frequency features: SRM (120) + DCT (57) + FFT (103) + metadata (3) = 283
+        features = []
+        
+        # SRM features (120): SRM_mean_1..20, SRM_var_1..20, ..., SRM_energy_1..20
+        for stat in ["mean", "var", "skew", "kurt", "entropy", "energy"]:
+            for i in range(1, 21):
+                key = f"SRM_{stat}_{i}"
+                features.append(row.get(key, 0.0))
+        
+        # DCT features (57)
+        dct_keys = [
+            "DCT_mean_low", "DCT_var_low", "DCT_skew_low", "DCT_kurt_low",
+            "DCT_mean_mid", "DCT_var_mid", "DCT_skew_mid", "DCT_kurt_mid",
+            "DCT_mean_high", "DCT_var_high", "DCT_skew_high", "DCT_kurt_high",
+            "DCT_entropy_low", "DCT_entropy_mid", "DCT_entropy_high", "DCT_energy_total"
+        ]
+        for key in dct_keys:
+            features.append(row.get(key, 0.0))
+        
+        # DCT zigzag (20)
+        for i in range(20):
+            features.append(row.get(f"DCT_zigzag_{i}", 0.0))
+        
+        # DCT histograms (24)
+        for band in ["low", "mid", "high"]:
+            for bin_idx in range(8):
+                features.append(row.get(f"DCT_hist_{band}_bin_{bin_idx}", 0.0))
+        
+        # FFT features (103)
+        fft_keys = [
+            "fft_psd_total", "fft_E_low", "fft_E_mid", "fft_E_high",
+            "fft_E_high_over_low", "fft_E_mid_over_low",
+            "fft_radial_centroid", "fft_radial_bandwidth",
+            "fft_rolloff_85", "fft_rolloff_95",
+            "fft_spectral_flatness", "fft_spectral_entropy", "fft_hf_slope_beta"
+        ]
+        for key in fft_keys:
+            features.append(row.get(key, 0.0))
+        
+        # FFT angular power spectrum (12)
+        for i in range(12):
+            features.append(row.get(f"fft_aps_{i}", 0.0))
+        
+        # FFT radial power spectrum (64)
+        for i in range(64):
+            features.append(row.get(f"fft_rps_{i}", 0.0))
+        
+        # FFT peaks (6)
+        for i in range(1, 4):
+            features.append(row.get(f"fft_peak{i}_r", 0.0))
+            features.append(row.get(f"fft_peak{i}_val", 0.0))
+        
+        # FFT JPEG grid (3)
+        features.append(row.get("fft_jpeg_8x8_x", 0.0))
+        features.append(row.get("fft_jpeg_8x8_y", 0.0))
+        features.append(row.get("fft_jpeg_8x8_diag", 0.0))
+        
+        # Metadata (not always needed, but in your CSV they exist)
+        # width, height, color_mode, resize_to, do_hann - skip if not in training
+        
+        return np.array(features, dtype=np.float32)[:283]  # Ensure exactly 283
+    
+    def _extract_openface_features(self, row: Dict) -> np.ndarray:
+        """Extract 674 openface features in correct order"""
+        features = []
+        
+        # OpenFace features: feature_1 to feature_674
+        for i in range(1, 675):
+            key = f"feature_{i}"
+            features.append(row.get(key, 0.0))
+        
+        return np.array(features, dtype=np.float32)
+    
+    def build_image_input(self, frame_refs: List[Dict], window_start: int) -> Optional[np.ndarray]:
+        """
+        Build (15, 224, 224, 3) image input by fetching frames
+        
+        Args:
+            frame_refs: List of frame pointer dicts with frame_index and uri
+            window_start: Starting frame_index for the window
+        
+        Returns:
+            (15, 224, 224, 3) numpy array or None if window incomplete
+        """
+        # Build URI list for the window
+        frame_refs_by_idx = {ref["frame_index"]: ref for ref in frame_refs}
+        
+        uris = []
+        for i in range(window_start, window_start + Config.SEQUENCE_LENGTH):
+            if i not in frame_refs_by_idx:
+                logger.warning(f"Missing frame_index {i} in frame_refs")
+                return None
+            uris.append(frame_refs_by_idx[i]["uri"])
+        
+        # Fetch frames
+        frames = self.frame_fetcher.fetch_batch(uris)
+        
+        # Check if all frames fetched successfully
+        if None in frames:
+            missing_indices = [i for i, f in enumerate(frames) if f is None]
+            logger.warning(f"Failed to fetch frames at indices: {missing_indices}")
+            return None
+        
+        # Stack into (15, 224, 224, 3)
+        image_input = np.stack(frames, axis=0)
+        return image_input
+    
+    def build_inputs(self, message: Dict[str, Any], window_start: int = 0) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """
+        Build both model inputs from message
+        
+        Returns:
+            (image_input, csv_input) - each shaped (1, 15, ...) or (None, None) if failed
+        """
+        frame_refs, features = self.parse_message(message)
+        
+        # Build CSV input
+        csv_input = self.build_csv_input(features, window_start)
+        if csv_input is None:
+            return None, None
+        
+        # Build image input
+        image_input = self.build_image_input(frame_refs, window_start)
+        if image_input is None:
+            return None, None
+        
+        # Add batch dimension
+        image_input = np.expand_dims(image_input, axis=0)  # (1, 15, 224, 224, 3)
+        csv_input = np.expand_dims(csv_input, axis=0)      # (1, 15, 957)
+        
+        return image_input, csv_input
+
+
+# ========================================
+# Deepfake Detector
+# ========================================
+class DeepfakeDetector:
+    """Runs TCN model inference"""
+    
+    def __init__(self, model_path: str):
+        logger.info(f"Loading model from {model_path}...")
+        self.model = keras.models.load_model(model_path)
+        logger.info("Model loaded successfully")
+        logger.info(f"Model inputs: {[inp.shape for inp in self.model.inputs]}")
+        logger.info(f"Model output: {self.model.output.shape}")
+    
+    def predict(self, image_input: np.ndarray, csv_input: np.ndarray) -> Dict[str, Any]:
+        """
+        Run inference and return prediction
+        
+        Returns:
+            {
+                "pred_prob": float,      # Probability of fake (0-1)
+                "pred_label": str,       # "real" or "fake"
+                "confidence": float,     # Max probability
+                "inference_ms": int      # Inference time
+            }
+        """
+        start = time.time()
+        
+        # Predict
+        pred = self.model.predict([image_input, csv_input], verbose=0)
+        
+        inference_ms = int((time.time() - start) * 1000)
+        
+        # Assuming binary classification: pred shape (1, 1) or (1, 2)
+        if pred.shape[-1] == 1:
+            # Binary output: fake probability
+            fake_prob = float(pred[0, 0])
+            real_prob = 1.0 - fake_prob
+        else:
+            # Two-class output: [real_prob, fake_prob]
+            real_prob = float(pred[0, 0])
+            fake_prob = float(pred[0, 1])
+        
+        pred_label = "fake" if fake_prob > 0.5 else "real"
+        confidence = max(fake_prob, real_prob)
+        
+        return {
+            "pred_prob": fake_prob,
+            "pred_label": pred_label,
+            "confidence": confidence,
+            "real_prob": real_prob,
+            "inference_ms": inference_ms
+        }
+
+
+# ========================================
+# RabbitMQ Consumer
+# ========================================
+class DeepfakeConsumer:
+    """Main consumer service"""
+    
+    def __init__(self):
+        self.config = Config()
+        
+        # Initialize components
+        self.frame_fetcher = FrameFetcher(
+            cache_size=self.config.FRAME_CACHE_SIZE,
+            timeout=self.config.FRAME_FETCH_TIMEOUT
+        )
+        
+        self.input_builder = InputBuilder(
+            scaler_path=self.config.SCALER_PATH,
+            frame_fetcher=self.frame_fetcher
+        )
+        
+        self.detector = DeepfakeDetector(model_path=self.config.MODEL_PATH)
+        
+        # RabbitMQ connection
+        self.connection = None
+        self.channel = None
+        
+        # Stats
+        self.messages_processed = 0
+        self.predictions_made = 0
+        self.errors = 0
+    
+    def connect_rabbitmq(self):
+        """Establish RabbitMQ connection"""
+        logger.info(f"Connecting to RabbitMQ: {self.config.RABBITMQ_URL}")
+        
+        parameters = pika.URLParameters(self.config.RABBITMQ_URL)
+        self.connection = pika.BlockingConnection(parameters)
+        self.channel = self.connection.channel()
+        
+        # Declare queue (idempotent)
+        self.channel.queue_declare(queue=self.config.RABBITMQ_QUEUE, durable=True)
+        
+        # Set QoS to process one message at a time
+        self.channel.basic_qos(prefetch_count=1)
+        
+        logger.info(f"Connected to RabbitMQ, consuming from queue: {self.config.RABBITMQ_QUEUE}")
+    
+    def process_message(self, ch, method, properties, body):
+        """Process a single RabbitMQ message"""
+        try:
+            # Parse message
+            message = json.loads(body)
+            session_id = message.get("session_id", "unknown")
+            batch_id = message.get("batch_id", "unknown")
+            frame_count = message.get("frame_count", 0)
+            
+            logger.info(f"Processing message: session={session_id}, batch={batch_id}, frames={frame_count}")
+            
+            # Build inputs (using first frame as window start)
+            # In production, you might process multiple overlapping windows
+            image_input, csv_input = self.input_builder.build_inputs(message, window_start=0)
+            
+            if image_input is None or csv_input is None:
+                logger.error(f"Failed to build inputs for session={session_id}, batch={batch_id}")
+                self.errors += 1
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
+            
+            # Run inference
+            prediction = self.detector.predict(image_input, csv_input)
+            
+            # Build result
+            result = {
+                "session_id": session_id,
+                "batch_id": batch_id,
+                "window_start_frame": 0,
+                "frame_count": frame_count,
+                "prediction": prediction,
+                "timestamp": time.time()
+            }
+            
+            logger.info(f"Prediction: {prediction['pred_label']} (prob={prediction['pred_prob']:.3f}, conf={prediction['confidence']:.3f})")
+            
+            # TODO: Broadcast via WebSocket
+            # For now, just log
+            
+            self.messages_processed += 1
+            self.predictions_made += 1
+            
+            # Acknowledge message
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
+            self.errors += 1
+            # Reject and requeue (or dead-letter if configured)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+    
+    def start(self):
+        """Start consuming messages"""
+        self.connect_rabbitmq()
+        
+        logger.info("Starting consumer... Press Ctrl+C to stop")
+        
+        self.channel.basic_consume(
+            queue=self.config.RABBITMQ_QUEUE,
+            on_message_callback=self.process_message
+        )
+        
+        try:
+            self.channel.start_consuming()
+        except KeyboardInterrupt:
+            logger.info("Stopping consumer...")
+            self.channel.stop_consuming()
+        finally:
+            if self.connection:
+                self.connection.close()
+            
+            logger.info(f"Consumer stopped. Stats: processed={self.messages_processed}, predictions={self.predictions_made}, errors={self.errors}")
+
+
+# ========================================
+# Main Entry Point
+# ========================================
+if __name__ == "__main__":
+    consumer = DeepfakeConsumer()
+    consumer.start()

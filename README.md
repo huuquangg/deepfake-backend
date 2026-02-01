@@ -1,1 +1,2 @@
-# Deepfake Backend
+# Dependencies
+sudo snap install ffmpeg

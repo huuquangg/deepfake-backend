@@ -9,6 +9,56 @@ venv/
 
 # Input/Output folders anywhere
 **/input
+**/bin
 **/output
 **/*.h5
 **/*.csv
+**/*.jpeg
+**/*.jpg
+**/*.png
+**/*.mp4
+**/*.mkv
+**/*.wav
+**/*.wmv
+**/*.avi
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin
+/pkg
+
+# Vendor
+/vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Model checkpoints (additional)
+**/checkpoints/
+**/models/*.pth
+**/models/*.pt
+
+# Database backups
+*.sql.gz
+*.dump

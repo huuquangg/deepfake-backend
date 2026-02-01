@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  batch-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    container_name: batch-deepfake-api
+    ports:
+      - "8001:8001"
+    environment:
+      - OPENFACE_BINARY=/usr/local/bin/FeatureExtraction
+      - TEMP_DIR=/tmp/openface_batch
+      - OUTPUT_DIR=/data/batch_output
+      - PORT=8001
+      - HOST=0.0.0.0
+    volumes:
+      - ./data/batch_output:/data/batch_output
+      - ./data/temp:/tmp/openface_batch
+    restart: unless-stopped
+    networks:
+      - deepfake-network
+
+networks:
+  deepfake-network:
+    driver: bridge
