@@ -1,0 +1,1083 @@
+VIETNAM NATIONAL UNIVERSITY HO CHI MINH CITY
+UNIVERSITY OF INFORMATION TECHNOLOGY 
+ADVANCED PROGRAM IN INFORMATION SYSTEMS
+
+
+
+DANG HUU QUANG
+TRAN THI MI TIEN
+
+
+
+SECURING MOBILE BANKING FACE AUTHENTICATION AGAINST DEEPFAKE ATTACKS VIA FREQUENCY ANALYSIS AND PHYSIOLOGICAL/BEHAVIORAL SIGNALS.
+
+
+
+BACHELOR OF ENGINEERING IN INFORMATION SYSTEMS
+
+
+
+
+
+Ho Chi Minh, 2025
+VIETNAM NATIONAL UNIVERSITY HO CHI MINH CITY
+UNIVERSITY OF INFORMATION TECHNOLOGY 
+ADVANCED PROGRAM IN INFORMATION SYSTEMS
+
+
+
+DANG HUU QUANG - 21522508
+TRAN THI MI TIEN- 21522674
+
+
+
+SECURING MOBILE BANKING FACE AUTHENTICATION AGAINST DEEPFAKE ATTACKS VIA FREQUENCY ANALYSIS AND PHYSIOLOGICAL/BEHAVIORAL SIGNALS.
+
+
+BACHELOR OF ENGINEERING IN INFORMATION SYSTEMS
+
+
+THESIS ADVISOR
+Assoc Prof. Ph.D NGUYEN DINH THUAN
+
+
+Ho Chi Minh, 2025
+ASSESSMENT COMMITTEE
+The Assessment Committee is established under the Decision . ........................, date.	........................,by the Rector of the University of Information Technology.
+1……………………………………... - Chairman.
+2…………………………………..….. - Secretary.
+3….….…….….………….………..…… - Member
+4…….…….….…………….….………. - Member.
+ACKNOWLEDGMENTS
+First of all, we would like to express our sincere gratitude to the University of Information Technology – Vietnam National University, Ho Chi Minh City, which has provided us with the best conditions for comprehensive development and supported us in improving ourselves throughout the past years of study. To complete this graduation thesis, we would like to extend our heartfelt and profound gratitude to the following individuals.
+We would like to express our sincere thanks to Associate Professor Dr. Nguyen Dinh Thuan and Engineer Nguyen Minh Nhut, who have wholeheartedly helped and guided us in our path of research and study. Their dedication and guidance have helped us become more confident and have become a great source of motivation for us to overcome many challenges in our own academic journey.
+Next, we would like to express our deep gratitude to all the teachers in the whole school, who have devoted themselves to teaching, always creating conditions, supporting and opening up many opportunities for us to develop on the academic path and imparting to us valuable experiences and invaluable knowledge throughout our years of study. We would also like to sincerely thank our seniors and friends who have accompanied us throughout our university journey, especially the CTTT2021 team and our colleagues in the FTISU research group.
+Finally, we would like to thank our parents, family and relatives who have always accompanied, believed in, supported and cared for us in the most difficult times. Without them, we would not have been able to be where we are today.
+Ho Chi Minh City, December 2025
+Student Implementation
+Dang Huu Quang
+Tran Thi Mi Tien
+TABLE OF CONTENTS
+ACKNOWLEDGMENTS	4
+TABLE OF CONTENTS	5
+TABLE OF FIGURES	7
+TABLE OF TABLES	9
+ABSTRACT	10
+CHAPTER 1: INTRODUCTION	11
+1.1. Problem Statement	11
+1.2. Objectives of the study	11
+1.3. Research Subjects and Scope	12
+1.3.1. Research Subjects	12
+1.3.2. Scope of Research	13
+CHAPTER 2: THEORY	15
+2.1. Time series models in deep learning	15
+2.1.1. Long Short-Term Memory (LSTM)	15
+2.1.2. Bidirectional LSTM (BiLSTM)	15
+2.1.3. Gated Recurrent Unit (GRU)	16
+2.1.4. Bidirectional GRU (BiGRU)	16
+2.1.5. Temporal Convolutional Network (TCN) for Time Series	17
+2.2. Frequency domain representation and image/video forensics	18
+2.2.1. Fast Fourier Transform (FFT) on Images	18
+2.2.2. Discrete Cosine Transform (DCT)	19
+2.2.3. Spatial Rich Model (SRM) and Forensic Noise Features	20
+2.3. Facial behavioral and physiological characteristics and analytical tools	20
+2.3.1. Facial Landmarks and Facial Shape Models	20
+2.3.2. Head poses: yaw, pitch, roll	21
+2.3.3. Eye gaze and blink features	21
+2.3.4. Action Units (AUs) according to FACS and facial expressions	21
+CHAPTER 3: METHODOLOGIES	23
+3.1. Literature Review and Research Framework	23
+3.1.1. Deepfake Detection Problems	23
+3.1.2. General Research Framework	24
+3.2. Data Splitting: Train/Validation/Test, Cross-Dataset, Cross-Scenario	26
+3.3. Video Preprocessing and Frame Sequence Construction	27
+3.3.1. Frame Extraction from Video	28
+3.3.2. Face Detection, Alignment, and Cropping	28
+3.3.3. Normalization, Resizing, and Color Space Processing	28
+3.4. Frequency Domain Feature Extraction	29
+3.4.1. Frequency analysis based on FFT	29
+3.4.2. Artifact analysis based on DCT	30
+3.4.3. Spatial Rich Model (SRM) Characteristics	32
+3.5. Biological behavioral signals extraction	33
+3.5.1. Facial and Head Posture Landmarks	33
+3.5.2. Gaze direction, blinking, and eye behavior	34
+3.5.3. Normalization and representation of behavioral signal sequences	35
+3.6. Combination Strategy and Final Classifier	36
+3.6.1. BiGRU with Multi-Head Self-Attention branch	36
+3.6.2. BiLSTM with Attention and KAN branch	38
+3.6.3. TCN Network with Residual Blocks	40
+3.7 Post-processing using Hidden Markov Models (HMMs)	42
+CHAPTER 4: EXPERIMENT AND EVALUATION	43
+4.1. Training process and implementation details	43
+4.1.1. Hardware configuration and software environment	46
+4.1.2. Training configuration and hyperparameters	47
+4.1.3. Data Augmentation	48
+4.2. Evaluation Methodology	49
+4.3. Experimental results on the Celeb-DF dataset	50
+4.3.1. Results of the BiGRU + Multi-Head Self-Attention + KAN model	50
+4.3.2. Results of the BiLSTM + Attention + KAN model	51
+4.3.3. Results of the TCN model with Residual blocks	51
+4.4. Experimental results on the FaceForensics++ dataset	52
+4.4.1. Results of the BiGRU + Multi-Head Self-Attention + KAN model	52
+4.4.2. Results of the BiLSTM + Attention + KAN model	53
+4.4.3. Results of the TCN model with Residual blocks	54
+4.5. Comparison and discussion of experimental results	54
+CHAPTER 5: APPLICATION DESIGN AND IMPLEMENTATION	58
+5.1 Chapter Overview	58
+5.2. System Components	59
+5.2.1 Mobile Application (React Native Expo)	60
+5.2.2. API Gateway	60
+5.2.2 Video-Streaming Service (Ingestion and forwarding)	60
+5.2.3 Deepfake Detection System (AI Processing Pipeline)	61
+5.2.4 Core Banking System (Golang + Clean Architecture)	62
+5.3. Requirements Analysis	63
+5.3.1. Functional requirements	63
+5.3.2. Non-functional requirements	79
+5.4. User Interfaces and User Experience.	81
+CHAPTER 6: CONCLUSION	85
+6.1 Summary and Key Contributions	85
+6.2 Achievements and Practical Significance	85
+6.3 Limitations and future development directions	86
+REFERENCES	87
+TABLE OF FIGURES
+Figure 1.  Illustrating the Fast Fourier Transform (FFT) on a face image; (a) original image in the spatial domain; (b) Amplitude spectrum in the frequency domain after applying FFT and spectral center shift.	18
+Figure 2. Illustrating the blockiness of artifacts resulting from DCT transformation and quantization in JPEG compression (a) original image (b) Image after compression to low-quality JPEG.	19
+Figure 3. SRM pipeline	20
+Figure 4. Video Analysis and Decision Pipeline.	24
+Figure 5. FaceForensics++ (FF++ C23) is used as a large‑scale benchmark for facial manipulation detection	44
+Figure 6. Illustrates the “end-to-end” flow of the system	58
+Figure 7. Use case diagram	63
+Figure 8. Register  activity diagram	71
+Figure 9. Login activity diagram	72
+Figure 10. Manage personal account activity diagram	73
+Figure 11. Manage transaction activity diagram	74
+Figure 12. Register sequence diagram	75
+Figure 13. Manage personal account  sequence diagram	76
+Figure 14. Login sequence diagram	77
+Figure 15. Manage transaction sequence diagram (1)	77
+Figure 16. Manage transaction sequence diagram (2)	78
+Figure 17. Manage transaction sequence diagram (3)	79
+Figure 18. Login and homepage.	81
+Figure 19. Manage transaction	82
+Figure 20. Transaction history	83
+Figure 21. Face authentication and deepfake detection	84
+
+TABLE OF TABLES
+Table 1. Results of the BiGRU + Multi-Head Self-Attention + KAN model 
+on the Celeb dataset	50
+Table 2. Results of the BiLSTM + Attention + KAN model on the Celeb dataset	51
+Table 3. Results of the TCN model with Residual blocks on the Celeb dataset	52
+Table 4. Results of the BiGRU + Multi-Head Self-Attention + KAN model 
+on the Face Forensic dataset	53
+Table 5. Results of the BiLSTM + Attention + KAN model on the Face Forensic dataset	53
+Table 6. Results of the TCN model with Residual blocks on the Face Forensic dataset	54
+Table 7. Overview result of models	55
+Table 8. Registration use case	65
+Table 9. Login use case	67
+Table 10. View personal profile use case	68
+Table 11. Transaction management use case	70
+
+ABSTRACT
+As deepfake technology rapidly advances, facial recognition has become a critical component of digital banking authentication while also facing increasingly sophisticated fraud and scam attacks involving real financial transactions. Many existing studies rely on standard datasets and spatial artifacts, but their effectiveness is limited in real banking environments where videos are heavily compressed, lighting varies, and real-time liveness assessment is required.
+To address this, the proposed system combines two complementary signal types. First, it analyzes frequency-domain “digital fingerprints” using FFT, DCT, and SRM to detect abnormal artifacts. Second, it extracts temporal behavioral cues—such as blink rate, gaze direction, and initial movement—from video sequences to evaluate the natural dynamics of facial behavior. These signals are jointly modeled using spatiotemporal architectures, including BiGRU with multi-head self-attention, BiLSTM with attention and KAN, and TCN with residual blocks, forming a robust detection framework.
+A simulated digital banking application was also developed to demonstrate practical applicability, featuring transaction authentication, anomaly-triggered blocking, and alert mechanisms. Experiments on benchmark datasets and simulated attack scenarios show that combining frequency-domain features with biometric temporal signals significantly improves reliability and detection performance compared to using either alone. The results indicate that integrating deepfake detection into facial authentication is feasible and enhances security in real-world digital banking systems.
+CHAPTER 1: INTRODUCTION
+1.1. Problem Statement
+The rapid advancement of deepfake technology poses a serious threat to facial recognition systems used for user authentication, especially in digital banking. Modern deepfake images and videos are increasingly realistic and can deceive both humans and automated systems, enabling attacks such as replay attacks, facial spoofing, and particularly deepfake livestreaming, which allows real-time identity fraud.
+Most existing detection methods focus on spatial artifacts in images and are evaluated mainly on standard datasets such as FaceForensics++, Celeb-DF, or DFDC. However, these datasets do not fully represent real banking environments, where videos are heavily compressed, lighting conditions vary, and authentication often occurs in real time. As synthesis techniques improve and visual artifacts diminish, the reliability of purely image-based detection continues to decline.
+To address these limitations, combining frequency-domain forensic analysis (FFT, DCT, SRM) with behavioral-physiological facial signals—such as blinking, gaze direction, and head movement—offers a more robust solution. Natural facial behaviors are difficult to perfectly replicate, especially under real-time constraints. Therefore, this research aims to develop a deepfake attack simulation system in a banking context and a detection model that integrates both digital traces and temporal behavioral signals to enhance the security and reliability of facial authentication.
+1.2. Objectives of the study
+The main objective of this study is to develop a deepfake detection system for digital banking authentication that operates reliably under real-world conditions. The system integrates frequency-domain forensic features and facial behavioral-physiological signals to improve robustness against advanced attacks. The specific objectives are:
+Design a deepfake attack simulation framework for digital banking:  Analyze common attack types in eKYC and transaction authentication (replay attacks, facial spoofing, deepfake livestreams) and simulate realistic banking conditions, including compressed video, unstable lighting, and real-time interaction.
+Develop a hybrid deepfake detection model  Construct a two-branch model that extracts frequency-domain features (FFT, DCT, SRM) to detect forensic artifacts and temporal behavioral signals (blinking, gaze direction, head movement) to assess facial naturalness over time.
+Integrate the detection model into a simulated banking application  Build a simulated mobile banking system with facial authentication and transaction verification, incorporating fraud detection, alert mechanisms, and session logging.
+Evaluate performance under diverse conditions: Assess the system using standard metrics (Accuracy, AUC, Precision, Recall, F1-score) on benchmark datasets and simulated scenarios, including strong compression, low light, large movements, and livestream attacks..
+1.3. Research Subjects and Scope
+1.3.1. Research Subjects
+This research focuses on the problem of fraud detection in facial authentication for digital banking applications, with a focus on deepfake attacks and forged image/video data capable of bypassing biometric mechanisms. Specifically, the research concentrates on analyzing common and highly practical scenarios such as deepfake livestreams, replay attacks, and facial synthesis methods commonly used to create fake content.
+In parallel with the investigation of attack types, the research also includes feature sets extracted directly from videos. One aspect is the group of forensic features in the frequency domain (FFT, DCT, SRM), which helps detect structural anomalies, composite noise, or unnatural traces. On the other hand, there are behavioral-physiological signals over time, such as blink cycles, gaze direction, and head movements—elements that reflect the naturalness of the face and are often difficult to fully replicate in deepfake videos.
+Based on time-series data, this study focuses on researching and applying three deep learning architectures to exploit dynamic information in videos. First, BiGRU combines Multi-Head Self-Attention to capture long-term dependencies and highlight signal segments prone to spoofing. Second, BiLSTM integrates Attention and KAN (Kolmogorov–Arnold Network) mechanisms, thereby learning bidirectional temporal dynamics and enhancing nonlinear representation. Finally, TCN uses Residual Blocks, which helps extract stable and efficient temporal features without relying heavily on sequential mechanisms like regression models. These three models are the core of the research, used to evaluate the ability to learn frequency features, behavioral features, and temporal relationships.
+1.3.2. Scope of Research
+The research is limited to the development and evaluation of a deepfake detection system within a simulated digital banking environment. No real banking data, users, or financial transactions are involved.
+The dataset consists only of facial images and videos, including real samples and deepfakes generated using common research tools. The study focuses on replay attacks and deepfake livestreams, while excluding hardware-intensive attacks such as 3D mask spoofing.
+Methodologically, the scope is restricted to frequency-domain and behavioral-physiological features and the three selected temporal models. The simulated banking application includes facial login, transaction authentication, and fraud alerts but is not deployed in real infrastructure. Legal, economic, and large-scale cybersecurity considerations are beyond the scope; instead, the focus is on detection performance and system stability under realistic simulated conditions.
+CHAPTER 2: THEORY
+2.1. Time series models in deep learning
+2.1.1. Long Short-Term Memory (LSTM)
+Long Short-Term Memory (LSTM) is an advanced variant of recurrent neural networks (RNNs) proposed to address the limitations in learning long-term dependencies in sequential data. Traditional RNNs often suffer from the vanishing gradient problem when processing long sequences, making it difficult to retain information from distant time steps. LSTM alleviates this issue by introducing a dedicated memory structure, referred to as the cell state, which enables information to be maintained and updated over longer periods of time [1].
+2.1.2. Bidirectional LSTM (BiLSTM)
+Bidirectional Long Short-Term Memory (BiLSTM) is an extended variant of the LSTM architecture, designed to process sequential data in both temporal directions. Instead of reading the sequence only from the first step to the last as in a traditional LSTM, a BiLSTM employs two parallel LSTM networks: one processes the sequence in the forward direction, while the other processes it in the backward direction. The outputs from these two networks are then combined to produce a more comprehensive representation for each element in the sequence.[2]
+Mathematically, at each time step t, the BiLSTM generates two independent hidden states:
+
+
+Where:
+ is the input element at time step t;
+ is the hidden state generated by the forward LSTM;
+ is the hidden state generated by the backward LSTM.
+These two hidden states are combined to form the final representation at time .  A common approach is to concatenate the two vectors:
+
+Alternatively, in some implementations, the two vectors may be summed:
+
+Overall, BiLSTM enhances the model’s ability to represent and interpret sequential data, thereby improving performance in many natural language processing tasks and other time-dependent applications.
+2.1.3. Gated Recurrent Unit (GRU)
+A Gated Recurrent Unit (GRU) is a streamlined variant of the LSTM architecture, designed to capture long-term dependencies in sequential data while maintaining faster training speed. The main idea behind GRU is to use gating mechanisms to regulate how information is retained or discarded over time, allowing the model to learn effectively without relying on the more complex structure of LSTM.[3]
+Overall, the GRU offers an effective balance between computational efficiency and the ability to capture long-range dependencies. With fewer parameters than LSTM yet often achieving comparable performance, GRUs have become a popular choice for systems that require both speed and accuracy.
+2.1.4. Bidirectional GRU (BiGRU)
+The Bidirectional Gated Recurrent Unit (BiGRU) is a two-directional extension of the GRU architecture that enables the model to capture information from both temporal directions: from past to present (forward) and from future back to past (backward). The original GRU, introduced by Cho et al. (2014), simplifies the LSTM structure by using two gating mechanisms—the update gate and the reset gate—to regulate how information flows through the hidden state.[4]
+
+Where:
+ represents the hidden state from the forward GRU;
+​ represents the hidden state from the backward GRU.
+
+By leveraging contextual cues from both preceding and succeeding elements in the sequence, BiGRU can better capture long-range dependencies and richer contextual information. This makes it particularly useful in tasks such as named entity recognition (NER), sentiment analysis, text classification, machine translation, speech recognition, and various time-series modeling applications. Combining the lightweight structure of GRU with bidirectional processing, BiGRU offers strong performance while maintaining relatively low computational complexity, making it a widely adopted choice in modern sequence-processing systems.[4]
+2.1.5. Temporal Convolutional Network (TCN) for Time Series
+A Temporal Convolutional Network (TCN) is a deep learning architecture based on convolutional operations, specifically designed for modeling sequential and time-series data. Unlike traditional recurrent neural networks such as LSTM or GRU, TCN employs one-dimensional convolutions along the temporal axis to extract dynamic features. This design allows the model to process the entire input sequence in parallel, resulting in more efficient training and better scalability.
+In the context of video-based deepfake detection, TCN can be employed to learn temporal patterns of facial dynamics, such as eye blinking frequency, head movements, and subtle changes in facial expressions. These behavioral signals are difficult to reproduce consistently in synthesized videos, and therefore, incorporating TCN contributes to improved discrimination between genuine and manipulated videos. The theoretical content of this section is summarized and adapted from foundational studies on Temporal Convolutional Networks [4][5]
+2.2. Frequency domain representation and image/video forensics
+2.2.1. Fast Fourier Transform (FFT) on Images
+Fast Fourier Transform (FFT) is an efficient algorithm used to compute the Discrete Fourier Transform (DFT), allowing data conversion from the spatial domain to the frequency domain. In digital image processing, FFT is used to analyze the frequency structure of images, thereby reflecting the energy distribution of image components at different levels of detail [6].
+
+Figure 1.  Illustrating the Fast Fourier Transform (FFT) on a face image; (a) original image in the spatial domain; (b) Amplitude spectrum in the frequency domain after applying FFT and spectral center shift.
+
+For facial image and video analysis, FFT is commonly applied to individual frames or cropped facial regions to obtain amplitude spectra that characterize the frequency distribution of image content. These frequency-domain representations can serve as a useful foundation for subsequent analysis techniques in forensic and authenticity assessment tasks.
+2.2.2. Discrete Cosine Transform (DCT)
+Discrete Cosine Transform (DCT) is a frequency domain transformation technique widely used in popular image and video compression standards such as JPEG and H.264/AVC. Similar to FFT, DCT allows data conversion from the spatial domain to the frequency domain; however, DCT has the characteristic of concentrating signal energy mainly in a few low-frequency coefficients, thus making it particularly suitable for lossy compression systems [7].
+In JPEG, the input image is divided into small 8×8 pixel blocks, and then each block is transformed to the frequency domain using a two-dimensional DCT. The obtained DCT coefficients are quantized, in which high-frequency coefficients are often rounded or removed to reduce storage space. This process helps achieve a high compression ratio but also loses some of the image detail [8].
+
+Figure 2. Illustrating the blockiness of artifacts resulting from DCT transformation and quantization in JPEG compression (a) original image (b) Image after compression to low-quality JPEG.
+
+These deviations often manifest as artifacts due to compression, including blockiness, ringing, and degradation of the natural texture of the image surface. In many cases, these artifacts are difficult to perceive with the naked eye but can be detected through statistical analysis of DCT coefficients [9].
+2.2.3. Spatial Rich Model (SRM) and Forensic Noise Features
+Spatial Rich Model (SRM) is a feature extraction method proposed in the field of image forensics, aimed at exploiting traces of micro-noise remaining during the creation, editing, or compression of digital images. Unlike semantic content-based analysis methods, SRM focuses on modeling noise residuals – that is, unwanted or visually imperceptible components that carry important information about the image's processing history [10].
+
+Figure 3. SRM pipeline 
+In deepfake detection, although modern generative models can produce highly realistic images and videos, the generation and post-processing stages may still introduce microscopic anomalies in noise distribution. Such artifacts are difficult to perceive in the spatial domain but can be effectively captured by SRM through statistical analysis of noise residuals [9]..
+2.3. Facial behavioral and physiological characteristics and analytical tools
+2.3.1. Facial Landmarks and Facial Shape Models
+Facial landmarks are a set of characteristic points identified on a person's face, usually corresponding to important anatomical locations such as the corners of the eyes, eyelids, eyebrows, bridge of the nose, nostrils, lip contour, and jawline. These points are widely used in computer vision to systematically describe facial shape and structure, relatively independent of factors such as color or surface texture. In modern facial analysis systems, landmarks act as an intermediate representation layer, helping to convert raw image data into meaningful geometric features [11].
+2.3.2. Head poses: yaw, pitch, roll
+Head pose is one of the important behavioral and physiological characteristics that reflects how humans naturally interact with their surroundings. In facial analysis, head pose is typically described through three main rotation angles in three-dimensional space: yaw, pitch, and roll [12]. These parameters represent, respectively, the movement of the head turning left and right, bowing and raising, and tilting around the front and back axis. Accurately estimating head pose allows for modeling the overall movement of the face over time, going beyond the scope of localized movements such as the eyes or mouth.
+2.3.3. Eye gaze and blink features
+Eye gaze and blinking are important physiological and behavioral characteristics that reflect natural human attention and interaction patterns. These behaviors are governed by involuntary physiological mechanisms and therefore are difficult to consciously control or consistently reproduce in synthesized facial content. As a result, eye gaze and blink features have been widely studied as effective indicators for liveness assessment and deepfake detection [13].
+2.3.4. Action Units (AUs) according to FACS and facial expressions
+Facial expressions play a crucial role in human nonverbal communication and reflect underlying emotional and physiological states. To objectively describe facial expressions, Ekman and Friesen introduced the Facial Action Coding System (FACS), which models facial movements through a set of basic components known as Action Units (AUs). Each AU corresponds to the activation of specific facial muscles, such as eyebrow raising, eye closing, or mouth corner pulling, allowing facial expressions to be represented in a detailed and interpretable manner [14].
+CHAPTER 3: METHODOLOGIES
+3.1. Literature Review and Research Framework
+3.1.1. Deepfake Detection Problems
+In modern digital banking, identity verification frequently relies on short face videos captured on a mobile device (eKYC onboarding, login, or high‑value transaction approval). In that setting, the system only receives a stream of facial pixels; it must infer whether the person is genuinely present or whether the biometric capture is being spoofed by a presentation attack such as a screen replay, a synthetic/deepfake rendering, or a manipulated recording. Under the ISO/IEC presentation‑attack framework, such attempts are treated as attacks on the biometric capture process and are evaluated through presentation attack detection (PAD) protocols [15]. 
+In this thesis, deepfake detection is therefore formulated as a binary decision problem operating on short facial video clips:
+Bona fide / real: a live, authentic capture of a legitimate user.
+Attack / fake: a clip that is synthesized, altered, or replayed to bypass face verification.
+Beyond accuracy, a banking deployment imposes practical constraints. First, inference must be fast enough for interactive authentication (low latency and predictable runtime). Second, the detector must generalize across identities, devices, and evolving attack pipelines rather than overfitting to dataset‑specific quirks. Finally, the method should remain robust under real‑world capture conditions such as motion blur, lighting variation, and compression, because these are routine in customer‑captured mobile videos.
+3.1.2. General Research Framework
+To meet the stated research requirements, this thesis adopts a multi-stage and modular video analysis pipeline, corresponding to the architecture illustrated in Figure  (Phase I & II – Video Analysis and Decision Pipeline). The framework is designed to progressively transform raw video input into a robust final decision through feature specialization, temporal reasoning, and decision smoothing.
+Figure 4. Video Analysis and Decision Pipeline.
+The overall workflow is organized as follows:
+(1) Input Video Acquisition: The system takes raw input videos as the primary data source. These videos may originate from public benchmarks or simulated attack scenarios and may vary in resolution, frame rate, and capture conditions.
+(2) Face Detection and Standardized Feature Extraction: Each video is decoded into frames, followed by face detection to localize facial regions. Detected faces are aligned and cropped to ensure spatial consistency across frames, reducing background noise and camera-dependent variations. This step establishes a standardized input representation for downstream analysis.
+(3) Multi-View Feature Analysis: From the preprocessed facial sequences, three complementary categories of features are extracted:
+Spatial Features: capture geometric and appearance-based information from facial regions, including generic visual patterns and local texture characteristics.
+Frequency Features: derived from frequency-domain transformations to reveal manipulation artifacts that are often imperceptible in the raw RGB domain, such as abnormal spectral patterns and waveform inconsistencies.
+Behavior Features: encode facial dynamics over time, including action patterns, facial movements, and behavior-related cues that reflect natural or manipulated expressions.
+(4) Feature Fusion: The extracted spatial, frequency, and behavior features are fused into a unified representation. This fusion stage enables the model to jointly reason over low-level artifacts and high-level behavioral evidence.
+(5) Temporal Modeling: Rather than treating frames independently, the fused feature sequences are modeled temporally. This step captures how manipulation evidence evolves across time, allowing the system to distinguish consistent temporal patterns from transient noise.
+(6) Advanced Temporal Models: To enhance sequence modeling capacity, multiple deep temporal architectures are employed, including: BiGRU with Multi-Head Attention and KAN (Kernel Attention Network), BiLSTM with Attention-based KAN, and Residual Temporal Convolutional Networks (TCN). These models capture both short-term dependencies and long-range temporal correlations in facial behavior and artifact evolution.
+(7) Prediction Layer: Outputs from the temporal models are mapped to prediction scores, representing the likelihood of manipulation for each video sequence.
+(8) Decision Smoothing and Final Decision: To reduce prediction instability across time, Hidden Markov Model (HMM) smoothing is applied. The smoothed outputs are then thresholded to produce the final binary decision, enhancing robustness and decision reliability in real-world deployment scenarios.
+Evaluation Protocol: The proposed framework is evaluated under multiple testing regimes, including: In-distribution evaluation, where training and testing data originate from the same dataset, and Out-of-distribution evaluation, where models are tested across datasets and simulated banking attack scenarios. Public benchmarks such as FaceForensics++ [16] and Celeb-DF (v2) [17] ensure comparability with existing literature, while simulation data better reflects practical operational threats.
+3.2. Data Splitting: Train/Validation/Test, Cross-Dataset, Cross-Scenario
+To obtain credible performance estimates and reduce evaluation bias, the experiments follow splitting strategies that emphasize identity separation and distribution shift.
+Splitting train/validation/test in each dataset
+Within each dataset, the split is constructed to avoid leakage where near‑duplicate frames or clips of the same identity appear in both training and testing. In practice, this means keeping train/validation/test partitions disjoint by identity or by source video, depending on the dataset’s recommended protocol, balancing real and fake samples across splits, ensuring that preprocessing parameters and normalization statistics learned on training data are reused consistently for validation and testing. This design targets a realistic verification setting where the system must handle unseen users and unseen recordings.
+Cross-Dataset Evaluation
+Cross‑dataset testing evaluates robustness under distribution shift. The core idea is to train on one public benchmark (or a mixture) and then test on a different benchmark without fine‑tuning. For example, a model trained on FF++ can be evaluated on Celeb‑DF (v2), and vice versa, to quantify how performance changes when manipulation pipelines, source videos, and compression characteristics differ [16] [17].
+Cross-scenario evaluation on simulation datasets
+For the banking simulation dataset, cross‑scenario evaluation explicitly tests whether a model trained under one threat condition can transfer to another. Representative cases include: Case one training on replay samples but testing on livestream deepfakes to measure adaptability to a new attack type, and second case training under benign recording conditions (good lighting, stable camera) and testing under challenging conditions (motion, backlighting), mixing public‑dataset training with partial simulation data while holding out a hidden scenario to mimic an attacker introducing a new capture setup.
+These experiments quantify practical generalization, which is essential for deployments where attack techniques and capture conditions evolve over time.
+3.3. Video Preprocessing and Frame Sequence Construction
+This section describes how raw videos are converted into standardized frame sequences suitable for both artifact‑centric and behavior‑centric feature extraction. The same preprocessing pipeline is applied across public benchmarks and simulation data to reduce confounding differences due to container formats, frame rates, or variable clip lengths.
+3.3.1. Frame Extraction from Video
+Each video is first decoded into an ordered frame stream. To ensure comparability across sources, frames are sampled using a consistent policy (e.g., fixed FPS or uniform sampling across the clip duration). After decoding, every frame is indexed and stored with metadata that supports deterministic reconstruction of sequences, typically including:
+Video ID (e.g., video_id),
+Frame index within the video (e.g., frame_index),
+Path to the corresponding image file on disk.
+This metadata enables reproducible loading, preserves temporal order, and simplifies batching by session/clip during model training and evaluation.
+3.3.2. Face Detection, Alignment, and Cropping
+Next, a face detector is applied to each extracted frame to localize the facial region. The detected face is then aligned to a canonical pose (using facial landmarks when available) so that key regions (eyes, nose, mouth) appear in consistent locations across frames. Finally, the aligned face is cropped to remove most of the background. This step serves three purposes. 
+First, it concentrates the model’s capacity on the informative region, reducing background‑driven shortcuts. Second, it mitigates viewpoint and scale variation, which makes subsequent artifact and behavior analyses more stable.  Third, it produces a unified input space for downstream modules that analyze both spatial cues (manipulation traces) and temporal cues (behavioral dynamics).
+3.3.3. Normalization, Resizing, and Color Space Processing
+After cropping, faces are resized to a fixed spatial resolution that balances detail preservation with computational efficiency. Pixel intensities are then normalized to a common scale (e.g., [0, 1] or standardized by mean and variance computed from the training split). Importantly, the same normalization statistics are reused for validation and test to prevent information leakage.
+Regarding color representation, the pipeline adopts a consistent color space (typically RGB) across all datasets. When videos originate from different encodings or chroma subsampling schemes, frames are converted to a common format during decoding to minimize discrepancies unrelated to authenticity.
+The output of preprocessing is a fixed‑length frame sequence (with padding or truncation when needed), ready for frequency‑domain feature extraction and behavioral signal modeling in subsequent sections.
+3.4. Frequency Domain Feature Extraction
+This section focuses on frequency-domain representations, which are useful for highlighting systematic artifacts introduced by synthesis, upsampling, and repeated compression. Compared with purely spatial cues, spectral features often generalize better because they capture how an image is formed rather than what is depicted.
+We extract three complementary groups of frequency-oriented descriptors: (i) FFT-based power spectrum features, (ii) DCT statistics that align with block-based compression traces, and (iii) SRM residual features that emphasize high-frequency noise patterns commonly leveraged in multimedia forensics.
+3.4.1. Frequency analysis based on FFT
+For each video frame, we first convert the image to grayscale and resize it to a fixed resolution to ensure consistent spectral resolution across samples. A 2D window function is applied to reduce boundary discontinuities (spectral leakage), after which we compute the 2D Fast Fourier Transform (FFT).
+We use the log power spectrum, i.e., the logarithm of the squared magnitude of the FFT, as the base representation. To avoid the overall illumination dominating the spectrum, the DC component is suppressed and the spectrum is centered so that low frequencies lie near the origin.
+From the spectrum, we derive compact descriptors by aggregating energy across frequency bands. In particular, we compute the relative energy in low-, mid-, and high-frequency regions (radial bands) and normalize by the total spectral energy to obtain scale-invariant ratios.
+To capture directional biases (e.g., periodic patterns introduced by upsampling), we also compute radial and angular profiles. Radial profiles average energy over concentric rings, while angular profiles average energy over orientation sectors, producing a low-dimensional summary of spectral anisotropy.
+Finally, we include features that reflect periodic block artifacts by measuring energy around frequencies associated with 8×8 block boundaries (a common footprint of JPEG-style compression). This helps capture traces from re-encoding or post-processing that are frequently present in forged content.
+Overall, the FFT pipeline yields a compact frequency descriptor per frame that is sensitive to synthesis/compression artifacts while remaining relatively agnostic to semantic content. [18] [19]
+3.4.2. Artifact analysis based on DCT
+While FFT summarizes global periodicities, the Discrete Cosine Transform (DCT) provides a complementary view that aligns directly with block-based image/video codecs. In many practical pipelines, frames are compressed at least once, so DCT coefficient statistics can expose subtle inconsistencies introduced by generation and recompression. Our DCT-based feature extraction follows a standard block-wise workflow:
+Convert each frame to the luminance channel (Y) to focus on intensity structure, which typically carries most compression energy.
+Partition the frame into non-overlapping 8×8 blocks (with padding if needed to match the block grid).
+Apply the 2D DCT to each 8×8 block to obtain one DC coefficient and 63 AC coefficients per block.
+Group coefficients into low-, mid-, and high-frequency sets (e.g., based on zig-zag ordering) to analyze how energy is distributed.
+For each group, compute summary statistics such as mean, standard deviation, skewness/kurtosis, and entropy, and optionally include histogram-based features for a coarse approximation of coefficient distributions.
+Aggregate block-level statistics across the full frame (e.g., by averaging and taking variance across blocks) to form a fixed-length descriptor per frame.
+Normalize features to reduce sensitivity to global brightness/contrast and to support stable training across datasets.
+We additionally include simple cross-block consistency cues (e.g., variance of AC energies across neighboring blocks), which can capture grid-like traces from compression and imperfect blending.
+The intuition is that forged frames may undergo different processing chains (generation → post-processing → re-encoding) compared with authentic videos, leading to measurable shifts in DCT coefficient distributions.
+This approach is lightweight: it does not rely on face semantics, and the resulting features can be computed efficiently on a per-frame basis.
+In practice, DCT statistics are most informative when the data includes mixed compression histories, which is common in real-world digital banking scenarios where videos are recorded, transmitted, and stored with multiple codecs.
+The extracted DCT descriptors are later combined with other feature groups to improve robustness under domain shift.
+The DCT pipeline is consistent with the JPEG coding framework and has been used in prior work to identify GAN-related compression-domain anomalies. [20] [21]
+3.4.3. Spatial Rich Model (SRM) Characteristics
+Spatial Rich Model (SRM) features originate from steganalysis and multimedia forensics, where the key idea is to suppress image content and amplify residual noise patterns that are hard to synthesize perfectly. For deepfake detection, such residual cues can complement both FFT and DCT by focusing on fine-grained, high-frequency inconsistencies.
+We compute SRM-inspired residual features by filtering each grayscale frame with a bank of high-pass kernels. These filters emphasize local prediction errors and reduce dependence on the underlying scene.
+The residual maps are then clipped/quantized to stabilize their dynamic range and to make statistics comparable across frames, following the SRM design principles. [22]
+From each residual map, we extract simple statistics (e.g., moments and histogram counts) and aggregate them across filters. This results in a compact vector that summarizes noise-like structure rather than semantic content.
+Compared with full SRM co-occurrence models, our implementation is intentionally lightweight to remain feasible for video-scale processing while still capturing meaningful forensic traces.
+In the overall pipeline, SRM features serve as an additional “forensic prior,” particularly helpful when manipulations introduce abnormal high-frequency textures or when frames have undergone multiple encoding steps.
+Prior literature has shown that incorporating high-frequency residual cues can improve manipulation detection under compression and cross-dataset testing. [23]
+3.5. Biological behavioral signals extraction
+Frequency-domain cues are useful, but deepfakes may also reveal themselves through inconsistencies in facial dynamics. We therefore extract biologically grounded behavioral features—head motion, gaze, blinking, and facial muscle activations—to capture temporal patterns that are difficult to reproduce reliably across frames.
+These features are extracted automatically using OpenFace 2.0, which provides facial landmarks, head pose, gaze estimates, and Action Unit (AU) predictions for each frame. [24]
+3.5.1. Facial and Head Posture Landmarks
+OpenFace outputs 2D/3D facial landmarks and a 6-DoF head pose (rotation and translation). We transform these raw signals into temporal descriptors that summarize stability and motion patterns across the clip. [24]
+Specifically, we compute both frame-level values and their temporal derivatives (velocity/acceleration) to characterize jitter, abrupt transitions, and overall motion smoothness. Key head/landmark-derived features include: Head pose angles (pitch, yaw, roll) and translations, along with their first- and second-order differences over time. And landmark geometry measures such as inter-point distances and shape ratios (e.g., mouth opening, eyebrow distance), plus temporal variability statistics.
+Because genuine videos tend to exhibit physically plausible motion continuity, these dynamics can help flag synthesized sequences that contain subtle tracking noise or temporal incoherence.
+3.5.2. Gaze direction, blinking, and eye behavior
+OpenFace also estimates eye gaze direction and eye landmarks. From these outputs, we derive blink- and gaze-related cues that reflect physiological behavior. [24]. We estimate blink events using eye-closure indicators over time, then compute clip-level statistics:
+Blink count and blink rate (blinks per second).
+Blink duration and the distribution of inter-blink intervals.
+Blink dynamics are especially relevant because early deepfake generation pipelines often failed to reproduce realistic blinking patterns, and deviations can remain detectable in challenging cases. [25]
+For gaze, we aggregate gaze vectors and angles to describe:
+Mean and variance of gaze direction (horizontal/vertical components).
+Gaze motion smoothness via temporal derivatives, capturing abrupt jumps that may arise from imperfect synthesis or alignment.
+These features aim to capture both “how often” and “how smoothly” the eyes move and blink throughout a clip.
+All gaze and blink features are computed per frame and then pooled (mean/variance and related statistics) to yield a fixed-length representation for classification.
+The resulting behavioral descriptor is later fused with frequency-domain features to improve robustness under varying recording conditions.
+To model facial expressions at a muscle-activation level, we use Facial Action Units (AUs) defined by the Facial Action Coding System (FACS). OpenFace provides AU presence/intensity estimates for each frame, allowing us to study expression dynamics. [24][14]
+We compute AU-based temporal descriptors that summarize:
+Average and variance of AU intensities across time (overall expression strength).
+Co-activation patterns using simple pairwise correlations between frequently co-occurring AUs.
+Temporal change rates of key AUs to capture unnatural abruptness or inconsistent micro-movements.
+These AU dynamics can complement landmarks and gaze by focusing on expression-level consistency, which may be subtly distorted by frame-wise synthesis.
+3.5.3. Normalization and representation of behavioral signal sequences
+After extracting facial behavioral signals, we align and normalize them to form a stable input sequence for the temporal models.
+First, per-feature standardization (z-score) is applied using statistics computed on the training set only, avoiding leakage into validation/test sets.
+Second, short-term noise is reduced with light temporal smoothing (e.g., moving averages) when needed, while preserving meaningful transitions.
+Finally, each clip is represented as a fixed-length sequence by uniform sampling or padding/truncation, ensuring consistent tensor shapes for all models.
+This preprocessing step produces synchronized temporal feature streams that can be fed into the sequence models described in Section 3.6.
+3.6. Combination Strategy and Final Classifier
+This section describes the learning architectures used to classify a clip as real or deepfake based on the extracted feature sequences. All feature streams are standardized using a training-set scaler and then organized into fixed-length sequences.
+We implement three complementary sequence models: (i) a BiGRU encoder followed by multi-head self-attention, (ii) a BiLSTM encoder with attention and a Kolmogorov–Arnold Network (KAN) classifier, and (iii) a Temporal Convolutional Network (TCN) with residual blocks.
+3.6.1. BiGRU with Multi-Head Self-Attention branch
+In this branch, the input to the model is a temporal feature sequence represented as
+
+To exploit temporal dynamics, the input feature sequence is fed into a Bidirectional Gated Recurrent Unit (BiGRU) network. Unlike a unidirectional GRU, which captures dependencies only from past to present, a BiGRU consists of two parallel GRU chains: one processes the sequence in the forward temporal direction; the other processes it in the reverse temporal direction.
+The gating mechanism of GRU enables the model to regulate information flow, allowing it to retain long-term dependencies while mitigating the vanishing gradient problem when modeling long sequences [26].
+At each time step t, the BiGRU produces two hidden states from the forward and backward passes, which are then combined (typically concatenated) to form a bidirectional temporal representation:
+
+As a result, the BiGRU outputs a sequence of hidden states:
+
+where each () encodes the bidirectional context for frame (t).
+Although BiGRU is effective at modeling temporal dependencies, not all frames contribute equally to deepfake detection. Certain frames such as those capturing lip motion inconsistencies, eye blinking artifacts, or subtle facial distortions often contain more discriminative cues.
+Therefore, the BiGRU output sequence is passed through a Multi-Head Self-Attention (MHA) module to: reweight frames according to their relative importance, model long-range interactions between non-adjacent time steps in the sequence [27].
+From the hidden-state matrix H, each attention head applies linear projections to generate Query (Q), Key (K), and Value (V) vectors. The self-attention mechanism allows each time step to attend to all others in the sequence, producing richer and more context-aware temporal representations. Using multiple attention heads enables the model to capture different types of temporal relationships simultaneously.
+To stabilize training and preserve information flow, residual connections and normalization layers are incorporated within the attention block.
+After the Multi-Head Self-Attention module, an attention-enhanced temporal feature sequence is obtained. To derive a clip-level representation, Global Average Pooling along the temporal dimension is applied:
+v=1Tt=1Th't
+where h't denotes the attention-weighted feature at time step t.
+The resulting feature vector v is then fed into fully connected layers followed by a sigmoid activation function to predict the probability that the input video is a deepfake.
+The combination of BiGRU and Multi-Head Self-Attention enables the model to effectively capture sequential temporal structures while explicitly focusing on the most informative frames within a video. This architecture is particularly well-suited for deepfake detection in real-world scenarios, where forgery artifacts tend to appear sparsely and unevenly over time.
+3.6.2. BiLSTM with Attention and KAN branch
+This branch employs a BiLSTM encoder to capture long-range temporal dependencies in feature sequences, combined with an attention pooling mechanism for temporal aggregation, and a Kolmogorov–Arnold Network (KAN) as the final classifier to determine whether a clip is real or deepfake [27], [28], [29].
+Long Short-Term Memory (LSTM) is a recurrent neural network architecture designed to address the vanishing gradient problem and preserve information over long sequences by maintaining both a hidden state and an explicit memory cell. This capability allows LSTM to retain important features that appear at distant time steps, which is particularly important in deepfake detection, where manipulation cues may occur sparsely or evolve gradually over time.
+In this study, the LSTM is implemented in a bidirectional manner (Bidirectional LSTM – BiLSTM), consisting of a forward pass that processes the sequence in chronological order and a backward pass that processes it in reverse order. The hidden representations from both directions are combined at each time step, resulting in a context-aware representation that incorporates information from the entire frame sequence.
+After BiLSTM encoding, the temporal sequence of hidden representations is passed through an attention pooling layer to aggregate them into a single clip-level feature vector. Instead of assuming that all frames contribute equally, the attention mechanism learns to assign higher weights to frames that contain more discriminative or reliable manipulation cues.
+This approach is particularly effective in scenarios where deepfake evidence is localized in short temporal segments, such as brief visual artifacts or short bursts of abnormal motion. By emphasizing informative frames and suppressing less relevant ones, attention pooling enables the model to focus on the most critical temporal evidence while reducing the influence of noise.
+Following attention pooling, the resulting clip-level feature vector is fed into a Kolmogorov–Arnold Network (KAN) classifier. Unlike conventional fully connected networks that rely on fixed activation functions, KAN replaces them with learnable univariate nonlinear functions, inspired by the Kolmogorov–Arnold representation theorem [28], [29].
+Thanks to its flexible nonlinear approximation capability, KAN is well suited for modeling complex relationships among the aggregated attention-based features, which can be regarded as tabular-like representations. This property allows the classifier to better capture intricate decision boundaries between real and deepfake clips.
+The output of the KAN classifier is a single probability value representing the likelihood that the input video clip is a deepfake.
+In summary, the BiLSTM–Attention–KAN branch combines the ability of BiLSTM to model long-range temporal dependencies, the attention mechanism to selectively emphasize informative frames, and the expressive nonlinear mapping capability of KAN. This integration enables effective modeling of both temporal dynamics and complex feature interactions, making this branch a strong complementary component within the proposed multi-architecture deepfake detection framework.
+3.6.3. TCN Network with Residual Blocks
+In addition to recurrent-based architectures, this thesis incorporates a Temporal Convolutional Network (TCN) as a complementary branch for modeling temporal dynamics in feature sequences. Unlike recurrent neural networks, TCNs rely on one-dimensional causal convolutions with dilation, enabling the modeling of long-range temporal dependencies while supporting parallel computation and stable training behavior [30].
+The TCN branch takes the same fixed-length feature sequence
+
+as input, where T denotes the number of time steps and each xt​ represents the extracted feature vector at frame t.
+The core operation of the TCN is the dilated causal convolution, which allows the receptive field to grow with network depth without increasing the number of parameters. Formally, the output at time step ttt is computed as:
+
+where k is the kernel size, d is the dilation factor, and fi denotes the convolutional filter coefficients.
+By stacking multiple dilated convolutional layers with increasing dilation rates, the receptive field grows rapidly with depth, enabling the TCN to efficiently capture long-range temporal dependencies while maintaining computational efficiency and stable optimization.
+To improve optimization and ensure stable gradient propagation in deeper architectures, each TCN layer is embedded within a residual block, following the residual learning paradigm [31]. Within a residual block, the transformed features are combined with the original input via a shortcut connection:
+y = F(x) + x
+This residual formulation helps prevent performance degradation in deeper networks and allows the model to learn incremental temporal refinements across layers.
+After passing through several residual TCN blocks, the network produces a high-level temporal feature representation covering the entire input sequence. To obtain a fixed-dimensional clip-level representation, Global Average Pooling (GAP) is applied along the temporal dimension:
+
+The resulting clip-level feature vector g is then fed into a final fully connected layer with a sigmoid activation function, producing a probability score that reflects the likelihood of the input video clip being a deepfake.
+In summary, the TCN with residual blocks provides a convolutional alternative to recurrent architectures for temporal modeling. By leveraging dilated causal convolutions and residual learning, this branch captures long-range temporal dependencies in an efficient and stable manner. When combined with the BiGRU- and BiLSTM-based branches, the TCN branch contributes complementary temporal representations, thereby enhancing the robustness and generalization capability of the proposed deepfake detection framework.
+3.7 Post-processing using Hidden Markov Models (HMMs)
+The HMM is defined with two hidden states, representing two distinct predictive behaviors corresponding to real and fake temporal trends. The emission probabilities are modeled using a Gaussian distribution with a diagonal covariance matrix, which is suitable for the continuous-valued prediction probabilities produced by the deep learning model.
+The HMM is fitted to the sequence of output probabilities generated by the deep model, and the Viterbi algorithm is then applied to infer the most likely sequence of hidden states. To associate each hidden state with a semantic label, a majority voting strategy based on ground truth annotations in the training set is adopted: the hidden state that occurs most frequently within real video segments is assigned the label “real,” while the remaining state is labeled as “fake.”
+This post-processing strategy effectively suppresses sporadic and inconsistent predictions over time, resulting in a smoother and more temporally coherent final decision, without directly modifying the underlying deep network architecture.
+CHAPTER 4: EXPERIMENT AND EVALUATION
+This chapter presents experimental results and performance evaluations of proposed deep learning models for deepfake detection. Through experiments, the chapter aims to compare and analyze the ability of each model to distinguish between real and fake videos when trained and tested on standard deepfake datasets. Experiments were conducted on two specific datasets, Face Forensics and Celeb-DF, using three different model architectures: BiGRU combined with Multi-Head Self-Attention and KAN, BiLSTM combined with Attention and KAN, and a TCN model using residual blocks. The performance of the models was evaluated using common metrics such as Accuracy, Precision, Recall, F1-score, and AUC. These metrics also form the basis for making observations about the effectiveness, stability, and generalizability of each model.
+4.1. Training process and implementation details
+This section details the hardware configuration, software environment, training hyperparameters, and data processing strategies used in the experiments. The goal is to ensure reproducibility and transparency in method reporting.
+
+4.1.2. Datasets and Attack Scenarios
+This section introduces the datasets used for training and evaluation, as well as the threat scenarios that motivate the simulation data. The dataset design has two goals: (i) remain comparable to prior deepfake‑forensics research through widely used public benchmarks, and (ii) approximate the banking context through targeted attack simulations.
+Datasets
+
+Figure 5. FaceForensics++ (FF++ C23) is used as a large‑scale benchmark for facial manipulation detection
+Celeb‑DF (v2) is included because it is widely regarded as more visually realistic and therefore more challenging than early deepfake datasets. The dataset was created with improved synthesis procedures to reduce obvious artifacts, which makes it well‑suited for stress‑testing generalization when the fake content is closer to “in‑the‑wild” quality [17].
+Together, FF++ and Celeb‑DF (v2) provide complementary coverage: FF++ offers breadth across manipulation types and controlled conditions, while Celeb‑DF (v2) emphasizes realism and difficulty.
+Attack Simulation Dataset (Livestream Deepfake, Face-Swapped Video Replay)
+Public deepfake datasets primarily capture offline manipulation pipelines. However, digital banking threat models often include attacks that are interactive or operationally constrained (for example, the attacker must respond in real time, or the video is injected through a device screen). To better reflect those risks, a dedicated simulation dataset is constructed with two core attack families:
+On the one hand, real‑time deepfake livestream: the attacker generates a live synthetic face stream to mimic a target during an authentication session.
+On the second hand, Face‑swapped video replay: the attacker replays a manipulated (or swapped) recording to the camera, attempting to pass as a live capture.
+These scenarios align with PAD concepts in ISO/IEC 30107‑3, where the objective is to distinguish bona fide presentations from presentations produced by an attack instrument or attack process [15].
+Deepfake livestream scenario
+In the livestream setting, the adversary must produce a face stream with low latency and sufficient realism while preserving plausible temporal dynamics (blink timing, head motion continuity, expression transitions). The simulation aims to capture typical failure modes of such pipelines—especially temporal instability and subtle artifact patterns introduced by real‑time rendering, transmission, and re‑encoding.
+Face-Swapped Video Replay Scenario
+In replay attacks, the system observes a genuine camera capture of a displayed video (screen‑to‑camera). This introduces characteristic cues such as moiré patterns, display refresh artifacts, reflection/illumination inconsistencies, and additional compression. When the replayed content is itself face‑swapped or deepfake‑generated, the resulting sample can combine both manipulation traces and replay‑channel traces, making it a realistic stress case for banking deployments.
+4.1.1. Hardware configuration and software environment
+The entire experiment was conducted on a GPU workstation with a Dell Precision 3580 configuration, equipped with 32 GB of DDR4 RAM and NVMe solid-state drives to accelerate video loading and feature read/write operations.
+The software environment was built around Python version 3.10.13 as the primary programming language. Model development, training, and management were implemented using TensorFlow 2.x with the Keras API. Additional supporting libraries included NumPy for numerical computation, OpenCV (version 4.8 or later) for image and video processing, Scikit-learn (version 1.3 or later) for data splitting, normalization, and evaluation, Pandas for structured data manipulation, and HMMLearn for implementing the Hidden Markov Model used in the post-processing stage.
+For the spatial branch, MobileNetV2 pre-trained on the ImageNet dataset was employed as the backbone network, with only the final layers fine-tuned in order to balance detection performance and computational cost.
+This hardware and software configuration was sufficient to sequentially train three architectures—BiGRU with Multi-Head Attention, BiLSTM with Attention and KAN, and Temporal Convolutional Networks (TCN)—on the pre-processed video datasets, with training times remaining within an acceptable range for a graduate-level thesis.
+
+4.1.2. Training configuration and hyperparameters
+The models were trained using a common strategy, differing only in a few hyperparameters related to batch size and input string length:
+Optimization: all architecture uses it. Adamax– a variant of Adam based on the infinity norm – serves as the optimizer. Adamax provides good stability when gradients are sparse, a common problem in complex sequential models.
+Initial learning rate: (3 × 10⁻⁴). When validation loss does not improve over 3 consecutive epochs, the learning rate is halved (by a factor of 0.5). And minimum learning rate threshold: (1 × 10⁻⁶).
+Loss function:
+The problem is binary classification (real/fake), therefore we use a function.binary cross-entropy:
+
+Where:
+() is the label ground truth (0 = fake, 1 = real), 
+() is the prediction probability.
+Training: Maximum number of epochs: 50.
+Early stopping: Training is stopped if validation accuracy does not improve for 5 consecutive epochs; the model with the best validation accuracy is saved and used for evaluation.
+The Keras callbacks: Several built-in Keras callbacks are utilized to manage the training process. ModelCheckpoint is used to save the model with the best validation accuracy. EarlyStopping is configured with a patience of five epochs to prevent overfitting. ReduceLROnPlateau is employed to decrease the learning rate when the validation loss stagnates for three epochs.
+Batch size and chain length: For the BiGRU and BiLSTM–KAN models, the batch size is set to 32 and the input sequence length is fixed at T=10 frames. In contrast, the TCN model with residual blocks uses a smaller batch size of 16 and a longer sequence length of T=15 frames, allowing it to better exploit its wider temporal receptive field.
+Spatial backbone and feature extraction: MobileNetV2 is adopted as the backbone convolutional neural network for spatial feature extraction, with weights initialized from ImageNet pre-training. During fine-tuning, only the last 20 layers are updated, while all preceding layers remain frozen. The final spatial features are extracted after the GlobalAveragePooling2D layer.
+Regularization strategies: To reduce overfitting and stabilize training, dropout is applied with a rate ranging from 0.2 to 0.3, depending on the model branch, with higher dropout ratios used in the final fully connected layers. Batch normalization is inserted after several convolutional and fully connected layers to stabilize activation distributions. Additionally, layer normalization is applied within attention blocks to further improve training stability and convergence speed.
+4.1.3. Data Augmentation
+To improve generalization capability and mitigate overfitting, data augmentation is applied exclusively to the training data at the frame level, while validation and test clips are kept unchanged to ensure consistent and fair evaluation conditions.
+For the BiGRU and BiLSTM–KAN models, a standard augmentation strategy is adopted. During training, each frame is randomly rotated within a range of ±15° and randomly zoomed by up to ±10%. Horizontal flipping is applied with a probability of 50%. In addition, pixel values are normalized to the range [0, 1].
+In contrast, the TCN–Residual model employs a more aggressive augmentation strategy. Since the TCN architecture benefits from a longer temporal context and exhibits stronger robustness to noise, a higher level of augmentation is introduced. Specifically, frames are randomly rotated within ±20°, shifted horizontally and vertically by up to ±15% of the image width and height, and randomly zoomed by up to ±15%. Brightness is also adjusted using a coefficient sampled from the range [0.8, 1.2]. Horizontal flipping is applied with a probability of 50%, and pixel values are normalized to the range [0, 1].
+Finally, all augmented frames are resized to a fixed resolution of 224×224 to match the input requirements of the MobileNetV2 backbone network.
+4.2. Evaluation Methodology
+To ensure that the evaluation of deepfake detection models is objective, consistent, and comparable, this study develops a unified evaluation method for all model architectures and datasets used. The entire evaluation process is designed to accurately reflect each model's ability to distinguish between real and fake videos, while minimizing biases caused by data segmentation or the selection of measurement metrics.
+Specifically, the models were trained and tested on two popular deepfake datasets: FaceForensics++ and Celeb-DF. Model performance was measured using common metrics in binary classification problems, including Accuracy, Precision, Recall, F1-score, and AUC. Accuracy reflects the overall accuracy of predictions, Precision and Recall help to analyze the accuracy of identifying fake videos and minimize missed cases, and F1-score acts as a balance between these two metrics. AUC is used to evaluate the ability to separate two classes across the entire decision threshold, providing an overall view of the model's predictive quality.
+Furthermore, the study also applied a 5-fold cross-validation-based evaluation strategy to ensure the stability of the results. With this method, the dataset was divided into five non-overlapping parts, each used as a test set, while the remaining parts were used for training and model refinement. The final results were aggregated by averaging the evaluation metrics across all five iterations, thereby reliably reflecting the overall performance of each model.
+4.3. Experimental results on the Celeb-DF dataset
+4.3.1. Results of the BiGRU + Multi-Head Self-Attention + KAN model
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.8203
+0.8485
+0.7778
+0.8116
+0.9145
+Fold 2
+0.8341
+0.8913
+0.7593
+0.8200
+0.9112
+Fold 3
+0.8618
+0.8624
+0.8624
+0.8624
+0.9317
+Fold 4
+0.8894
+0.9670
+0.8073
+0.8800
+0.9611
+Fold 5
+0.7685
+0.7042
+0.9259
+0.8000
+0.8742
+Average
+0.8348
+0.8547
+0.8265
+0.8348
+0.9186
+
+Table 1. Results of the BiGRU + Multi-Head Self-Attention + KAN model on the Celeb dataset
+The results show that the BiGRU model combining Multi-Head Self-Attention and KAN achieved relatively good performance on the Celeb-DF dataset. The average accuracy reached 83.48% along with an AUC of 91.86%, indicating that the model is capable of effectively distinguishing between real and fake video. However, the variability between folds suggests that the model is still somewhat affected by the diversity and complexity of the Celeb-DF data.
+4.3.2. Results of the BiLSTM + Attention + KAN model
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.8111
+0.8190
+0.7963
+0.8075
+0.8646
+Fold 2
+0.8111
+0.9351
+0.6667
+0.7784
+0.9177
+Fold 3
+0.8387
+0.9302
+0.7339
+0.8205
+0.9269
+Fold 4
+0.8111
+0.8208
+0.7982
+0.8093
+0.8571
+Fold 5
+0.8194
+0.8966
+0.7222
+0.8000
+0.8897
+Medium
+0.8183
+0.8803
+0.7435
+0.8031
+0.8912
+
+Table 2. Results of the BiLSTM + Attention + KAN model on the Celeb dataset
+From the table above, we can see that the BiLSTM model combining Attention and KAN achieved an average Accuracy of 81.83% on the Celeb-DF dataset. The model showed relatively high Precision but lower Recall, reflecting a cautious prediction tendency and the potential to miss some spurious video patterns. The results between folds were quite stable, indicating good consistency in the model's evaluation process.
+4.3.3. Results of the TCN model with Residual blocks
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.5115
+0.5093
+0.5093
+0.5093
+0.5539
+Fold 2
+0.5023
+0.0000
+0.0000
+0.0000
+0.5765
+Fold 3
+0.7696
+0.6980
+0.9541
+0.8062
+0.8773
+Fold 4
+0.5023
+0.5046
+0.5046
+0.5046
+0.8951
+Fold 5
+0.7731
+0.8315
+0.6852
+0.7513
+0.8267
+Average
+0.6118
+0.5087
+0.5306
+0.5143
+0.7459
+
+Table 3. Results of the TCN model with Residual blocks on the Celeb dataset
+Looking at the results above, it can be seen that the TCN model with residual blocks performs poorly and is unstable on the Celeb-DF dataset. The average accuracy is only 61.18%, along with a large difference between folds, reflecting limited generalization capabilities. This indicates that the TCN architecture struggles to handle the complex and diverse deepfake features in Celeb-DF.
+4.4. Experimental results on the FaceForensics++ dataset
+4.4.1. Results of the BiGRU + Multi-Head Self-Attention + KAN model
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.8325
+0.7671
+0.9550
+0.8508
+0.9376
+Fold 2
+0.8425
+0.8072
+0.9000
+0.8511
+0.9261
+Fold 3
+0.8325
+0.7806
+0.9250
+0.8467
+0.9273
+Fold 4
+0.8750
+0.9213
+0.8200
+0.8677
+0.9537
+Fold 5
+0.8625
+0.9191
+0.7950
+0.8525
+0.9398
+Average
+0.8490
+0.8391
+0.8790
+0.8538
+0.9369
+
+Table 4. Results of the BiGRU + Multi-Head Self-Attention + KAN model on the Face Forensic dataset
+The results from the table above show that the BiGRU model combining Multi-Head Self-Attention and KAN achieves high and stable performance on the FaceForensics++ dataset. The average accuracy is 84.90% along with an AUC of 93.69%, reflecting strong discrimination between real and fake videos. The metrics between folds show little variation, indicating that the model adapts well to the characteristics of this dataset.
+4.4.2. Results of the BiLSTM + Attention + KAN model
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.5000
+0.0000
+0.0000
+0.0000
+0.9286
+Fold 2
+0.8550
+0.8480
+0.8650
+0.8564
+0.9259
+Fold 3
+1.0000
+1.0000
+1.0000
+1.0000
+0.8711
+Fold 4
+0.8800
+0.9318
+0.8200
+0.8723
+0.9579
+Fold 5
+0.8975
+0.8841
+0.9150
+0.8993
+0.8946
+Average
+0.8265
+0.7328
+0.7200
+0.7256
+0.9156
+
+Table 5. Results of the BiLSTM + Attention + KAN model on the Face Forensic dataset
+Looking at the table above, we can see that the BiLSTM model combining Attention and KAN achieved an average accuracy of 82.65% on the FaceForensics++ dataset. Although some folds yielded very high results, the model still exhibited significant variability between folds, particularly in Precision and Recall metrics. This indicates that the model's performance still depends on how the data is distributed within each fold.
+4.4.3. Results of the TCN model with Residual blocks
+Fold
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Fold 1
+0.8450
+0.7974
+0.9250
+0.8565
+0.9338
+Fold 2
+0.8600
+0.8130
+0.9350
+0.8698
+0.9434
+Fold 3
+0.8100
+0.7696
+0.8850
+0.8233
+0.9013
+Fold 4
+0.8525
+0.7975
+0.9450
+0.8650
+0.9501
+Fold 5
+0.8375
+0.7668
+0.9700
+0.8565
+0.9452
+Average
+0.8410
+0.7889
+0.9320
+0.8542
+0.9348
+
+Table 6. Results of the TCN model with Residual blocks on the Face Forensic dataset
+The table above shows that the TCN model with residual blocks achieves high and stable performance on the FaceForensics++ dataset. Average accuracy reaches 84.10% along with recall of 93.20%, indicating the model's exceptional effectiveness in detecting spoofing videos. The consistency between folds reflects the model's good generalization ability on datasets with well-defined structures and features like FaceForensics++.
+4.5. Comparison and discussion of experimental results
+Dataset
+Model
+Accuracy
+Precision
+Recall
+F1-score
+AUC
+Celeb-DF
+BiGRU Multi-Head Self-Attention with KAN
+0.8348
+0.8547
+0.8265
+0.8348
+0.9186
+BiLSTM with Attention and KAN
+0.8183
+0.8803
+0.7435
+0.8031
+0.8912
+TCN Residual Blocks
+0.6118
+0.5087
+0.5306
+0.5143
+0.7459
+FaceForensics++
+BiGRU Multi-Head Self-Attention with KAN
+0.8490
+0.8391
+0.8790
+0.8538
+0.9369
+BiLSTM with Attention and KAN
+0.8265
+0.7328
+0.7200
+0.7256
+0.9156
+TCN Residual Blocks
+0.8410
+0.7889
+0.9320
+0.8542
+0.9348
+
+Table 7. Overview result of models
+Based on the results obtained from the two datasets, Celeb-DF and FaceForensics++, a significant difference in performance between the model architectures and the extent to which data features influence deepfake detection capabilities can be observed. This comparison clarifies the advantages and disadvantages of each model and evaluates its generalizability under different data conditions.
+Considering the Celeb-DF dataset, the BiGRU model combining Multi-Head Self-Attention and KAN showed the best and most stable performance. This model achieved an average accuracy of 0.8348 along with an AUC value of up to 0.9186, reflecting its ability to effectively distinguish between real and fake video. Precision, Recall, and F1-score metrics were all balanced, indicating that the model not only accurately predicted but also maintained good deepfake detection capabilities without sacrificing a high false alarm rate. The moderate variation between folds suggests the model's ability to learn general features on a highly complex dataset like Celeb-DF.
+Compared to BiGRU, the BiLSTM model combining Attention and KAN on Celeb-DF achieved slightly lower average accuracy. Although Precision reached a fairly high value, Recall decreased significantly, resulting in a lower F1-score. This suggests the model tends towards cautious prediction, prioritizing the reduction of false positives but not being truly strong in detecting all deepfake patterns. Nevertheless, the stability between the folds of this model is relatively good, reflecting stable convergence during training.
+Conversely, the TCN model with residual blocks showed significantly poor performance on the Celeb-DF dataset. The average accuracy was only 0.6118, while the F1-score and AUC were also low and varied greatly between folds. This result indicates that the TCN model struggles to handle sophisticated and diverse deepfake operations, which are a prominent characteristic of Celeb-DF. The TCN's strong reliance on long-term context may not be effective in cases where the forgery signatures appear intermittently or are dispersed over time.
+On the FaceForensics++ dataset, the performance trends among the models show a notable shift. The BiGRU model, combining Multi-Head Self-Attention and KAN, continues to demonstrate high and stable performance, with an average accuracy of 0.8490 and an AUC of 0.9369. Notably, the high Recall value indicates the model's ability to detect deepfakes effectively on this dataset. This suggests that the architecture combining a two-dimensional sequential model and a multi-head attention mechanism effectively exploits the consistent spatio-temporal features in FaceForensics++.
+The BiLSTM model combining Attention and KAN in FaceForensics++ achieved relatively high average accuracy; however, results varied significantly between folds. Some folds performed very well, even approaching perfection, while one fold yielded unusually low results. This reflects the model's sensitivity to data partitioning and also indicates that the generalizability of BiLSTM–Attention–KAN is not yet stable when data distribution changes.
+Notably, the TCN model with residual blocks performed very well on FaceForensics++. This model achieved an average accuracy of 0.8410, an F1-score of 0.8542, and an AUC of 0.9348, along with low variability between folds. This result suggests that TCN is capable of effectively exploiting long-term features and repetitive spoofing structures, which are common in FaceForensics++. This explains why TCN performed better on FaceForensics++ but less so on Celeb-DF.
+Synthesizing the results from the two datasets shows that the BiGRU model combining Multi-Head Self-Attention and KAN is the architecture with the best performance and generalization capabilities. This model maintained high performance on both datasets, demonstrating flexibility and adaptability to different deepfake features. Meanwhile, BiLSTM–Attention–KAN is suitable for scenarios with relatively stable structured data, while TCN–Residual shows clear strengths on highly sequential and patterned datasets, but is less effective when faced with complex and diverse deepfake operations.
+CHAPTER 5: APPLICATION DESIGN AND IMPLEMENTATION
+5.1 Chapter Overview
+The design and implementation of a digital banking system integrating deepfake facial fraud detection within the context of eKYC/user authentication. The goal of this chapter is to demonstrate the feasibility of the proposed solution in the previous chapters with a practical implementation architecture: from facial data acquisition, feature extraction, model inference, to decision integration into the banking business flow (authentication – transaction – alert).
+
+Figure 6. Illustrates the “end-to-end” flow of the system
+(i) The user performs facial authentication on the mobile application (camera); (ii) the video-streaming module receives and organizes data according to session; (iii) the deepfake-extractor module extracts features from two directions: behavioral/face features and image features, and combines them with the frequency/forensic domain feature group FFT/DCT/SRM in the Fusion block; (iv) the Detection module performs time-series classification using sequential models (BiLSTM/BiGRU/TCN); (v)The results are stored (PostgreSQL) and integrated into core-banking functions such as Authentication, Transaction, and Alert to complete the business response cycle.
+In the following sections of the chapter, the thesis presents: (1) the architecture and design of the main modules;(2) the functional and non-functional requirements of the system and (3) the UI/UX design for the application flow.
+5.2. System Components
+The Deepfake Banking system is designed with a client-server (online) architecture, implemented with clear layering and modular separation to ensure scalability, ease of maintenance, and integration into banking operations. The entire data flow is processed from left to right (according to the architectural diagram), starting from the user's device (camera on the mobile app), passing through the video/frame reception and coordination layer, AI processing for feature extraction and deepfake inference, and then the results are sent to the Core Banking System for business decision-making (allowing/rejecting transactions, issuing alerts).
+Essentially, the server-side organizational system is organized into four main functional service blocks operating in a microservices flow: (1) Mobile Application, (2) Video-Streaming Service, (3) Deepfake Detection System, and (4) Core Banking System. Each block performs a separate role, while coordinating closely through APIs and session management mechanisms to ensure data consistency and traceability when audits are needed.
+5.2.1 Mobile Application (React Native Expo)
+The mobile application serves as the primary user interface and the starting point for the deepfake authentication mechanism. The application was developed using React Native Expo to support multiple platforms (iOS/Android), and TypeScript to improve code quality and reduce runtime errors. Screen navigation is organized using Expo Router.
+In the deepfake authentication step, when a user performs a sensitive operation (typically a money transfer), the application prompts the user to authenticate their face via the camera. A short video/snippet is recorded, then converted into a frame sequence and sent to the Video-Streaming Service using the session ID. This design allows the authentication process to occur near real-time without interrupting the user experience, while also reducing the risk of data mix-ups between sessions.
+5.2.2. API Gateway
+The API Gateway is positioned at the edge layer as a reverse proxy, ensuring all mobile app traffic passes through a single "gateway" before entering core banking, video streaming, and deepfake services. The gateway is responsible for routing/load balancing and applying connection policies at the edge level, while also supporting reverse proxying for socket connections (WebSocket/streaming) to maintain a real-time data channel (frame/chunk pushing and processing status reception) with lower latency than polling.
+5.2.2 Video-Streaming Service (Ingestion and forwarding)
+The data organization mechanism is based on the key pair `{userId}/{sessionId}`. Each authentication session creates its own temporary storage area to: receive frames in chronological order, temporarily store them as image files (or video chunks), record session metadata (session creation time, upload status, number of frames, device, etc.), and trigger a processing job in the Deepfake Detection System.
+In practical implementation, the heavy processing (feature extraction + inference) should be managed asynchronously (job/queue) to avoid timeouts and increase stability under high load. However, at the demo scale, minimal synchronous implementation is possible, provided that session state tracking is still ensured (UPLOADING → UPLOADED → PROCESSING → DONE/FAILED).
+5.2.3 Deepfake Detection System (AI Processing Pipeline)
+The Deepfake Detection System is the AI ​​processing center of the system. Its main goal is to analyze the frame sequence captured from the camera to detect whether the video shows signs of deepfake. The AI ​​architecture is designed in three main steps: (i) feature extraction, (ii) feature fusion, and (iii) time-series detection. OpenFace extracts features related to faces and behavior such as landmarks, head pose, gaze, action units, blink signals, etc. MobileNetV2 extracts deep learning image features (embedding) from frames, and Feature Fusion combines them with frequency domain forensic features and structural noise: such as FFT (Fast Fourier Transform), DCT (Discrete Cosine Transform), and SRM (Spatial Rich Model) to detect traces of noise/texture and microscopic artifacts often found in fake images.
+Detection Module – Time Series Classification
+The final step involves performing classification on the time-series feature sequence. The system tests deep learning models suitable for the time series data: BiLSTM, BiGRU, and TCN.
+The output of the Detection Module is a predictive label (real/fake or risk level) along with a confidence score. The confidence score is used to make business decisions (allow, request re-verification, or deny/push moderation).
+5.2.4 Core Banking System (Golang + Clean Architecture)
+The Core Banking System is the central processing unit for banking operations, responsible for functions such as user authentication, account management, transaction processing, and security alert management. The system is implemented using Go (Golang) with a Clean Architecture approach to ensure performance, layer separation, and scalability. The core data is stored in PostgreSQL with full ACID properties to ensure transaction security. In the context of deepfake integration, the core banking system receives results from the Deepfake Detection System and uses those results as a risk control signal.
+If the result is safe (real, high confidence), the system allows the transaction to continue. If there is suspicion or suspicion of fraud, the system rejects the transaction, generates a security alert, logs the audit, and sends a notification to the user.
+5.3. Requirements Analysis
+5.3.1. Functional requirements
+Use case diagram
+
+Figure 7. Use case diagram
+USE CASE 1: REGISTRATION
+Name
+Register
+Script
+Users want to create a new account to access banking features, including money transfers, with deepfake detection security.
+Describe
+This use case occurs when a new user wants to register an account for the UIT Banking system. After successful registration, the system automatically creates a bank account with an initial balance of 0 VND and redirects to the homepage.
+Agent
+User
+Activation conditions
+Users click 'Register', enter their username, email address, password, full name, and phone number.
+Related use cases
+Log in
+Prerequisites
+The user does not yet have an account in the system.
+The user has a valid email address.
+The user has an internet connection.
+The following conditions
+Success: User account created with default bank account. User receives a JWT token and is redirected to the homepage.
+Failure: Display an error message and ask the user to try again.
+Event flow
+1. The user selects the 'Register' button on the screen.
+2. The system redirects to the registration page.
+3. The user enters their username, email address, password, fullname, and phone number.
+4. Users submit registration forms.
+5. The system checks the validity of the input information.
+6. Does the system check if usernames and email addresses are unique?
+7. Password encryption system using bcrypt.
+8. The system creates user accounts and automatically generates bank accounts along with account numbers.
+9. The system generates JWT tokens for users.
+10. The system displayed successfully and redirected to the homepage.
+Exception conditions
+If the username already exists, display 'Username already exists'.
+If the email address already exists, display 'Email is already in use'.
+If input data validation fails, display the specific error.
+If there is a database error, return 'Registration failed, please try again'.
+
+Table 8. Registration use case
+USE CASE 2: LOG IN
+Name
+Log in
+Script
+Users want to access their bank accounts to conduct transactions, view balances, and manage financial information.
+Describe
+This use case occurs when a registered user wants to authenticate and access the banking system. After successfully logging in, the user receives a JWT token to manage their session.
+Agent
+User
+Activation conditions
+Users click 'Log in', then enter their username and password.
+Related use cases
+Register, Log out
+Prerequisites
+The user already has an account registered in the system.
+The user has an internet connection.
+The user is currently on the login screen.
+The following conditions
+Success: User authenticated, JWT token generated and stored. User redirected to the homepage/dashboard.
+Failure: Displays error message 'Incorrect username or password'.
+Event flow
+1. The user selects the 'Login' button on the screen.
+2. The system displays the login form.
+3. The user enters their username and password.
+4. The user submits the login form.
+5. Input format checking system.
+6. The system searches for users by username in the database.
+7. System for comparing encrypted passwords.
+8. The system checks if the user has a bank account; if not, it automatically creates one.
+9. The system stores tokens in AsyncStorage.
+10. The system redirects the user to the home page/dashboard.
+Exception conditions
+If the username does not exist, display 'Incorrect username or password'.
+If the password is incorrect, return 'Incorrect username or password'.
+If there is a database error, display 'Login failed, please try again'.
+If there is a network error, display 'Please check your internet connection'.
+
+Table 9. Login use case
+USE CASE 3: VIEW PERSONAL PROFILE
+Name
+Manage personal account
+Script
+Users want to manage their account information: quickly view current information, edit/update (name, email, phone number, etc.), change some basic account and security settings (e.g., change password, log out).
+Describe
+This use case occurs when a user accesses the "Personal Account" area to update their information. The system downloads user data from the database, displays it on the UI, and allows the user to edit and save it. The system validates the data, verifies the JWT, and updates the data in the database.
+Agent
+User
+Activation conditions
+Users tap “Account” / “Personal” / “Account” from the navigation menu or tab bar in the app.
+Related use cases
+Log in, View Profile –extend(From Manage personal account), Log out, Change password
+Prerequisites
+1. The user has logged in with a valid JWT token.
+2. The application requires an internet connection.
+The following conditions
+Success: Account information is updated and saved in the database; the application displays the latest information on the account screen. Failure: No changes are saved; the system retains the old data and displays an appropriate error message.
+
+Table 10. View personal profile use case
+USE CASE 4: TRANSACTION MANAGERMENT
+Name
+Transfer money
+Script
+Users want to transfer money to another account. This is the main feature of the system and requires mandatory facial authentication with deepfake detection to ensure security.
+Describe
+This is the core use case of the UIT Banking system. The user initiates a money transfer, performs facial authentication, the system detects deepfakes, and completes or blocks the transaction based on the AI ​​analysis results.
+Agent
+User
+Activation conditions
+Users click 'Transfer Money' or 'Send Money', enter the recipient's account number, the amount, and an optional description.
+Related use cases
+Facial authentication (<<include>>), View transaction history, Create security alerts (<<extend>>)
+Prerequisites
+The user has logged in with a valid JWT token.
+The user has sufficient funds in their account.
+The user has granted camera permission.
+The recipient's account exists in the system.
+The user has an internet connection.
+The following conditions
+Success: Money has been transferred from sender to recipient. The transaction is saved in the database. The balance is updated. A success message is displayed.
+Failure (Deepfake detected): Transaction is immediately blocked. A security alert is generated and saved. The user receives a warning notification.
+Failure (Insufficient balance): Transaction rejected. An error message will be displayed.
+Event flow
+1. The user navigates to the Transfer Money screen.
+2. The user enters the recipient's account number.
+3. The system verifies that the recipient's account exists.
+4. The user enters the amount and optional description.
+5. The system checks the format of the amount and ensures the balance is sufficient.
+6. The user clicks 'Next' or 'Continue'.
+7. Activate Facial Authentication System (<<include>>) - MANDATORY Step.
+8. Face Authentication captures a photo of the user's face.
+9. System sends images to Deepfake Detection (<<include>>) - MANDATORY Step.
+10. The AI ​​system analyzes the image and returns the results.
+11. If a deepfake is detected: <<extend>> Generate a Security Alert, block the transaction, and notify the user.
+12. If there is no deepfake: The user confirms the transaction details.
+13. The system sends a POST request to /api/transaction/transfer with the JWT token.
+14. The system verifies the JWT token and checks the balance.
+15. The system processes the transaction: deducting from the sender and adding to the recipient's account.
+16. The system stores transaction records in the database.
+17. The system displays the message 'Money transfer successful'.
+18. The system updates and displays the balance.
+Exception conditions
+If the JWT token is invalid, proceed to login.
+If the recipient's account is not found, display 'Recipient's account not found'.
+If the balance is insufficient, display 'Insufficient balance'.
+If camera permission is denied, display 'Camera access required'.
+If no face is detected, display 'No face detected, please try again'.
+If a deepfake is detected, <<extend>> to Create Security Alert, displaying 'Deepfake detected! Transaction blocked to protect you'.
+If a network error occurs during authentication, display 'Authentication failed, please try again'. If a database error occurs during the transfer process, the transaction will be undone and displayed as 'Transfer failed'.
+
+Table 11. Transaction management use case
+
+Activity diagram
+
+Figure 8. Register  activity diagram
+
+
+Figure 9. Login activity diagram
+
+
+
+Figure 10.  Manage personal account activity diagram
+
+
+Figure 11.  Manage transaction activity diagram
+
+Sequence diagram
+Figure 12. Register sequence diagram
+
+Figure 13. Manage personal account  sequence diagram
+
+Figure 14. Login sequence diagram
+
+Figure 15. Manage transaction sequence diagram (1)
+
+
+Figure 16. Manage transaction sequence diagram (2)
+
+
+Figure 17. Manage transaction sequence diagram (3)
+5.3.2. Non-functional requirements
+Besides login/registration, account management, transaction processing, and deepfake detection integration, the UIT Banking system needs to meet non-functional requirements to ensure stable and secure operation in the digital banking environment, especially when handling sensitive data (accounts, transactions, faces).
+Performance: The system must respond reliably to frequent operations such as login, account viewing, and transaction history. The deepfake detection process (video/frame capture → feature extraction → inference) requires appropriate processing time to avoid interrupting the transaction creation experience; when processing is lengthy, the system must display status and avoid request hangs.
+Availability: Core functions need to operate continuously, minimizing downtime. When the AI ​​module fails or becomes overloaded, the system needs to transition to a safe processing state (retry/postpone/deny depending on policy) instead of causing the entire system to shut down.
+Data Reliability & Integrity. Transactions must ensure atomicity and data consistency (avoiding incomplete balance updates). With deepfake detection, data must be correctly assigned `userId/sessionId` to ensure the results return the correct authentication session in progress.
+Security. The system needs centralized authentication and access control (token/JWT), and mechanisms to limit access frequency to reduce the risk of abuse/attacks. Sensitive actions such as creating transactions and deepfake authentication must be more tightly protected than normal information queries.
+Scalability. Because AI processing is resource-intensive, the system needs to allow the deepfake detection module to be separated into a distinct service and scale according to load without affecting the core banking and mobile app.
+Maintainability. The architecture needs to be modular so that the model (BiLSTM/BiGRU/TCN) or features (OpenFace, MobileNetV2, FFT/DCT/SRM) can be changed without disrupting the banking business logic; model configuration and versions must be clearly managed.
+Deployment and Portability Services should be easy to package and deploy in server/container environments, ensuring reconfigurability between development and demo/production environments.
+5.4. User Interfaces and User Experience.
+Login and Home screen
+Figure 18. Login and homepage. 
+Transaction
+
+Figure 19. Manage transaction 
+Transaction history
+Figure 20. Transaction history
+Face authentication and deepfake detection
+Figure 21. Face authentication and deepfake detection
+CHAPTER 6: CONCLUSION
+6.1 Summary and Key Contributions
+This thesis addresses facial fraud in digital banking by moving beyond simple real/fake classification and jointly analyzing both forgery traces and the naturalness of facial behavior over time. The proposed approach integrates two complementary signal groups: frequency-domain forensic features (FFT, DCT, SRM) and behavioral-physiological cues such as blinking, gaze direction, and head movement, which are difficult to consistently reproduce in deepfakes.
+To model temporal dynamics, three sequence-processing architectures were implemented and compared: BiGRU with Multi-Head Self-Attention and KAN, BiLSTM with Attention and KAN, and TCN with Residual Blocks. In addition to algorithmic research, the thesis demonstrates a research-to-product workflow by integrating the detection model into a simulated banking system, where authentication results are directly used as risk control signals in transaction processing.
+6.2 Achievements and Practical Significance
+Experiments on Celeb-DF and FaceForensics++ show clear performance differences among the models. On Celeb-DF, BiGRU + MHA + KAN achieved the best performance (Accuracy 0.8348, AUC 0.9186), followed by BiLSTM + Attention + KAN, while TCN-Residual performed significantly weaker. On FaceForensics++, BiGRU + MHA + KAN remained strong (Accuracy 0.8490, AUC 0.9369), TCN-Residual showed improved stability, and BiLSTM exhibited greater sensitivity to data splits.
+Practically, the model is embedded into a simulated banking workflow: legitimate transactions proceed normally, while suspicious sessions trigger transaction blocking, alerts, logging, and user notification. This demonstrates how deepfake detection can function as an operational risk control mechanism rather than an isolated machine learning task.
+6.3 Limitations and future development directions
+First, the scope of the study is limited to a simulated environment: it does not use real bank data or connect to actual core banking infrastructure; therefore, many real-world implementation factors (regulations, operations, supervision, high load) have not been fully verified.
+Next, the stability between folds shows that some architectures are still sensitive to data distribution; for example, BiLSTM can fluctuate strongly from fold to fold, reflecting a generalization capability that is not yet truly "smooth".
+Ultimately, at the system layer, there is still room for optimization towards real-time and high-load performance: the heavy processing (feature extraction + inference) is, in the long run, better suited to asynchronous scheduling (job/queue) to avoid timeouts and increase stability.
+From the points above, possible development directions include: (i) standardizing session-based streaming mechanisms and optimizing the inference pipeline based on time windows; (ii) adding strategies to reduce domain shift (fine-tune based on target data domains, update controlled model versions); (iii) increasing explanatory power (clarifying time segments/frames that strongly contribute to decision-making); and (iv) perfecting storage and security policies for biometric data, aligning with audit requirements and privacy in the banking environment.
+REFERENCES
+[1] MathWorks (2025) What is long short-term memory (LSTM)?, What Is Long Short-Term Memory (LSTM)? - MATLAB & Simulink. Available at: https://www.mathworks.com/discovery/lstm.html (Accessed: 15 December 2025). 
+[2] GeeksforGeeks (2025a) Bidirectional LSTM in NLP, GeeksforGeeks. Available at: https://www.geeksforgeeks.org/nlp/bidirectional-lstm-in-nlp/ (Accessed: 15 December 2025). 
+[3] GeeksforGeeks (2025b) Gated Recurrent Unit Networks, GeeksforGeeks. Available at: https://www.geeksforgeeks.org/machine-learning/gated-recurrent-unit-networks/ (Accessed: 15 December 2025). 
+[4] Mahdi, E., Martin-Barreiro, C. and Cabezas, X. (2025) A novel hybrid approach using an attention-based Transformer + GRU model for predicting cryptocurrency prices, arXiv.org. Available at: https://arxiv.org/abs/2504.17079 (Accessed: 15 December 2025). 
+[5] Bai, S., Kolter, J.Z. and Koltun, V. (2018) An empirical evaluation of generic convolutional and recurrent networks for Sequence modeling, arXiv.org. Available at: https://arxiv.org/abs/1803.01271 (Accessed: 15 December 2025). 
+[6] Wikipedia – Fast Fourier Transform (FFT) https://en.wikipedia.org/wiki/Fast_Fourier_transform
+[7] N. Ahmed, T. Natarajan, and K. R. Rao, Discrete Cosine Transform, IEEE Transactions on Computers, 1974. https://ieeexplore.ieee.org/document/5004812
+[8] G. K. Wallace, The JPEG Still Picture Compression Standard, IEEE Transactions on Consumer Electronics, 1992. https://ieeexplore.ieee.org/document/164370
+[9] Y. Qian et al., Thinking in Frequency: Face Forgery Detection via Frequency Analysis, CVPR, 2020.https://arxiv.org/abs/2002.07285 
+[10] J. Fridrich and J. Kodovský,Rich Models for Steganalysis of Digital Images, IEEE Transactions on Information Forensics and Security, 2012. https://ieeexplore.ieee.org/document/6234433 
+[11] I. Matthews and S. Baker, Active Appearance Models Revisited, International Journal of Computer Vision, 2004. https://link.springer.com/article/10.1023/B:VISI.0000029666.37597.d3 
+[12] E. Murphy-Chutorian and M. M. Trivedi, Head Pose Estimation in Computer Vision: A Survey, IEEE Transactions on Pattern Analysis and Machine Intelligence, 2009. https://ieeexplore.ieee.org/document/5206638 
+[13] Y. Li, M.-C. Chang, and S. Lyu, In Ictu Oculi: Exposing AI Created Fake Videos by Detecting Eye Blinking, IEEE ICASSP, 2018. https://ieeexplore.ieee.org/document/8462672 
+[14] P. Ekman and W. V. Friesen, Facial Action Coding System: A Technique for the Measurement of Facial Movement, Consulting Psychologists Press, 1978.
+[15] ISO/IEC 30107-3:2017. Information technology — Biometric presentation attack detection — Part 3: Testing and reporting. International Organization for Standardization (ISO).
+[16] Rössler, A., Cozzolino, D., Verdoliva, L., Riess, J., Thies, J., & Nießner, M. (2019). FaceForensics++: Learning to Detect Manipulated Facial Images. arXiv:1901.08971.
+[17] Li, Y., Yang, X., Sun, P., Qi, H., & Lyu, S. (2020).Celeb-DF: A Large-Scale Challenging Dataset for DeepFake ForensicsCVPR 2020.
+[18] Cooley, J. W., & Tukey, J. W. (1965). An algorithm for the machine calculation of complex Fourier series. Mathematics of Computation, 19(90), 297–301.
+[19] Durall, R., Keuper, M., & Keuper, J. (2019). Unmasking DeepFakes with simple Features. arXiv:1911.00686.
+[20] ISO/IEC 10918-1 (ITU-T T.81). Digital compression and coding of continuous-tone still images (JPEG): Requirements and guidelines.
+[21] Giudice, O., Guarnera, L., & Battiato, S. (2021). Fighting Deepfakes by Detecting GAN DCT Anomalies. (arXiv / preprint).
+[22] Fridrich, J., & Kodovský, J. (2012). Rich Models for Steganalysis of Digital Images. IEEE Transactions on Information Forensics and Security, 7(3), 868–882.
+[23] Luo, Y., Zhang, Y., Yan, J., & Liu, W. (2021). Generalizing Face Forgery Detection with High-frequency Features. Proceedings of CVPR 2021.
+[24] Baltrušaitis, T., Zadeh, A., Lim, Y. C., & Morency, L.-P. (2018). OpenFace 2.0: Facial Behavior Analysis Toolkit. (toolkit/paper).
+[25] Li, Y., Chang, M.-C., & Lyu, S. (2018). In Ictu Oculi: Exposing AI Created Fake Videos by Detecting Eye Blinking. IEEE International Workshop on Information Forensics and Security (WIFS).
+[26] Cho, K., Van Merriënboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H., & Bengio, Y. (2014). Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation. arXiv:1406.1078.
+[27] Vaswani , A. , Shazeer , N. , Parmar , N. , Uszkoreit , J. , Jones , L. , Gomez , A. N. , Kaiser , Ł. , & Polosukhin , I. (2017). Attention Is All You Need. NeurIPS.
+[28] Hochreiter, S., & Schmidhuber, J. (1997). Long Short-Term Memory. Neural Computation, 9(8), 1735–1780.
+[29] Liu, Z., Wang, Y., Vaidya, A., Ruehle, F., Halverson, J., & Soljačić, M. (2024). Kolmogorov–Arnold Networks. arXiv:2404.19756.
+[30] Bai, S., Kolter, J. Z., & Koltun, V. (2018). An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling. arXiv:1803.01271.
+[31] He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. Proceedings of CVPR 2016.
